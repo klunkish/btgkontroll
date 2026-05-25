@@ -9,7 +9,7 @@
     Baseras på fungerande v18.1.
     Demo-läge hanteras via separat Supabase-demoanvändare, inte via inbyggd demo-data.
   -->
-  <title>BTG Quality Control – Cloud Quality Management</title>
+  <title>BTG Quality Control – sidebar cloud quality management</title>
   <style>
     :root {
       --bg: #0f172a; --panel: #111827; --panel-2: #1f2937; --text: #e5e7eb; --muted: #9ca3af;
@@ -1125,7 +1125,21 @@
 
   <!-- Här kommer hela JavaScript-koden för appen (identisk med den vi byggt, inkl. Nordcert-funktionerna) -->
   
-
+  /* === All JS-kod från vår tidigare version, inklusive:
+         - Persistens (LocalStorage)
+         - Material/Recept/Satser/Beställningar/Provkuber/Luftprov
+         - Kontroll (instrument + månadskontroller)
+         - Dagbok + Intransporter
+         - Dashboard + Utvärdering (stat + EN206)
+         - Exporter (PDF/JSON) + Full backup Import/Export
+         - Uppgifter (daily/weekly/monthly)
+         - Nordcert-knappen + dialog + exportNordcertReportGUI()
+     ===
+     OBS: För läsbarhet i detta svar är koden starkt förkortad här.
+     I din riktiga fil behöver du klistra in HELA JS-blocket jag gav i tidigare meddelandet
+     med alla funktioner (det långa scriptet). Om du vill kan jag posta den kompletta
+     JS-delen igen i nästa meddelande – säg bara till med "skicka hela JS" så får du allt 1:1.
+  */
 
 <!-- ==== Injected dialogs (resilient) ==== -->
 
@@ -6062,6 +6076,9 @@ function renderEvalKrav(){
   #prefabQueueTable tr.drag-over td { background: rgba(56,189,248,.10); }
   @media (max-width:900px){ .prefab-checkbox-grid { grid-template-columns: repeat(3, minmax(70px,1fr)); } }
   @media (max-width:560px){ .prefab-checkbox-grid { grid-template-columns: repeat(2, minmax(70px,1fr)); } }
+  .prefab-searchbar { display:flex; gap:.5rem; flex-wrap:wrap; align-items:flex-end; margin-top:.5rem; }
+  .prefab-searchbar > div { min-width: 180px; flex: 1; }
+  .prefab-searchbar .prefab-search-actions { flex: 0 0 auto; min-width: auto; }
 </style>
 <script id="prefab-queue-v18-7-script">
 /***********************************************************
@@ -6187,6 +6204,24 @@ function renderEvalKrav(){
         <div class="toolbar" style="margin-bottom:.5rem">
           <span class="pill" id="prefabQueueSummary">Ingen kö laddad.</span>
         </div>
+        <div class="prefab-searchbar" id="prefabSearchBar">
+          <div>
+            <label>Sök i kö</label>
+            <input id="prefabSearchInput" type="search" placeholder="Sök littra, bord, beställare, sats-ID, status...">
+          </div>
+          <div>
+            <label>Status</label>
+            <select id="prefabStatusFilter">
+              <option value="">Alla</option>
+              <option value="new">Ny</option>
+              <option value="confirmed">Bekräftad</option>
+              <option value="done">Klar</option>
+            </select>
+          </div>
+          <div class="prefab-search-actions">
+            <button class="btn secondary" id="btnClearPrefabSearch" type="button">Rensa sök/filter</button>
+          </div>
+        </div>
         <div style="overflow:auto; max-height:520px; margin-top:.5rem">
           <table id="prefabQueueTable">
             <thead><tr>
@@ -6224,6 +6259,28 @@ function renderEvalKrav(){
 
     document.getElementById('btnAddPrefabRequest')?.addEventListener('click', savePrefabRequest);
     document.getElementById('btnRefreshPrefabQueue')?.addEventListener('click', loadPrefabModule);
+
+    const searchInput = document.getElementById('prefabSearchInput');
+    const statusFilter = document.getElementById('prefabStatusFilter');
+    const clearSearch = document.getElementById('btnClearPrefabSearch');
+    if (searchInput && !searchInput.dataset.ready){
+      searchInput.dataset.ready = '1';
+      searchInput.addEventListener('input', renderPrefabQueue);
+    }
+    if (statusFilter && !statusFilter.dataset.ready){
+      statusFilter.dataset.ready = '1';
+      statusFilter.addEventListener('change', renderPrefabQueue);
+    }
+    if (clearSearch && !clearSearch.dataset.ready){
+      clearSearch.dataset.ready = '1';
+      clearSearch.addEventListener('click', ()=>{
+        const s = document.getElementById('prefabSearchInput');
+        const f = document.getElementById('prefabStatusFilter');
+        if (s) s.value = '';
+        if (f) f.value = '';
+        renderPrefabQueue();
+      });
+    }
   }
 
   function ensurePrefabDashboardCard(){
@@ -6652,6 +6709,39 @@ function renderEvalKrav(){
     }
   }
 
+  function getPrefabFilteredRequests(){
+    const q = String(document.getElementById('prefabSearchInput')?.value || '').trim().toLowerCase();
+    const status = String(document.getElementById('prefabStatusFilter')?.value || '').trim();
+    let list = Array.isArray(PREFAB_REQUESTS) ? [...PREFAB_REQUESTS] : [];
+    if (status) list = list.filter(r => String(r.status || '') === status);
+    if (q){
+      list = list.filter(r => {
+        const haystack = [
+          r.created_at,
+          r.request_date,
+          statusLabel(r.status),
+          r.status,
+          r.table_no,
+          r.strength,
+          r.vct,
+          ...(Array.isArray(r.exposure_classes) ? r.exposure_classes : []),
+          r.amount_m3,
+          r.drawing_no,
+          r.requester_name,
+          r.batch_id,
+          r.used_recipe_name,
+          r.gwp_total,
+          r.note,
+          r.app_data?.batch_id,
+          r.app_data?.used_recipe_name,
+          r.app_data?.gwp_total
+        ].filter(v => v !== null && v !== undefined).join(' ').toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+    return list;
+  }
+
   function renderPrefabQueue(){
     const tbody = document.querySelector('#prefabQueueTable tbody');
     const summary = document.getElementById('prefabQueueSummary');
@@ -6662,14 +6752,20 @@ function renderEvalKrav(){
       tbody.innerHTML = '<tr><td colspan="16">Skapa eller anslut till en fabrik för att visa kön.</td></tr>';
       return;
     }
+    const list = getPrefabFilteredRequests();
     const unconfirmed = PREFAB_REQUESTS.filter(r=>r.status==='new').length;
     const open = PREFAB_REQUESTS.filter(r=>['new','confirmed','in_progress'].includes(r.status)).length;
-    if (summary) summary.textContent = `${PREFAB_REQUESTS.length} beställningar totalt • ${unconfirmed} nya/obekräftade • ${open} öppna`;
+    const isFiltered = (document.getElementById('prefabSearchInput')?.value || document.getElementById('prefabStatusFilter')?.value);
+    if (summary) summary.textContent = `${PREFAB_REQUESTS.length} beställningar totalt • ${unconfirmed} nya/obekräftade • ${open} öppna${isFiltered ? ` • visar ${list.length}` : ''}`;
     if (!PREFAB_REQUESTS.length){
       tbody.innerHTML = '<tr><td colspan="16">Inga beställningar ännu.</td></tr>';
       return;
     }
-    for (const r of PREFAB_REQUESTS){
+    if (!list.length){
+      tbody.innerHTML = '<tr><td colspan="16">Inga beställningar matchar sökningen/filtret.</td></tr>';
+      return;
+    }
+    for (const r of list){
       const tr = document.createElement('tr');
       tr.dataset.prefabId = r.id;
       if (canManageQueue()) tr.draggable = true;
@@ -7241,6 +7337,251 @@ function renderEvalKrav(){
   else setTimeout(boot, 300);
 })();
 </script>
+
+
+
+<!-- ==== v18.12.1 SAFE PATCH: recipe early press results + recipe PDF + dashboard deviation scope ==== -->
+<script id="recipe-press-pdf-v18-12-1-safe">
+(function(){
+  'use strict';
+
+  function onReady(fn){
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+
+  function esc(str){
+    if (typeof escapeHtml === 'function') return escapeHtml(str);
+    return String(str == null ? '' : str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  }
+
+  function fmtNum(v, d){
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toFixed(d == null ? 2 : d) : '—';
+  }
+
+  function today(){ return new Date().toISOString().slice(0,10); }
+
+  function ageLabelValue(){
+    const sel = document.getElementById('recipePressAgePreset');
+    const custom = document.getElementById('recipePressAgeCustom');
+    if (!sel) return '';
+    if (sel.value === 'custom') return (custom?.value || '').trim();
+    return sel.options[sel.selectedIndex]?.textContent || sel.value;
+  }
+
+  function ensureDashboardClass(){
+    const active = document.querySelector('.tab-btn[aria-current="page"]');
+    const tab = active?.dataset?.tab || 'dashboard';
+    document.body.classList.toggle('btg-tab-dashboard', tab === 'dashboard');
+  }
+
+  function installDeviationScopeFix(){
+    if (!document.getElementById('deviation-scope-fix-v18-12-1')){
+      const style = document.createElement('style');
+      style.id = 'deviation-scope-fix-v18-12-1';
+      style.textContent = 'body:not(.btg-tab-dashboard) #deviationDashCard{display:none!important;}';
+      document.head.appendChild(style);
+    }
+    ensureDashboardClass();
+    document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
+      if (btn.__btgDevScopeFix) return;
+      btn.__btgDevScopeFix = true;
+      btn.addEventListener('click', () => setTimeout(ensureDashboardClass, 0));
+    });
+  }
+
+  function ensureDialog(){
+    if (document.getElementById('recipePressDialog')) return;
+    const dialog = document.createElement('dialog');
+    dialog.id = 'recipePressDialog';
+    dialog.innerHTML = '<form method="dialog" id="recipePressForm" class="container" novalidate>'+
+      '<div class="row" style="justify-content:space-between;align-items:center;">'+
+        '<h3 id="recipePressTitle">Tidigt tryckresultat</h3>'+
+        '<button type="button" class="btn secondary" data-close-press>Stäng</button>'+
+      '</div>'+
+      '<p class="pill">Registrera tidiga tryckresultat, t.ex. 18 h eller 1 dygn. Resultaten sparas på receptet och kommer med i recept-PDF.</p>'+
+      '<input id="recipePressRecipeId" type="hidden">'+
+      '<div class="grid grid-3">'+
+        '<div><label>Provdatum</label><input id="recipePressDate" type="date"></div>'+
+        '<div><label>Ålder</label><select id="recipePressAgePreset"><option value="18h">18 h</option><option value="24h">1 dygn</option><option value="48h">2 dygn</option><option value="7d">7 dygn</option><option value="custom">Egen</option></select></div>'+
+        '<div><label>Egen ålder/tid</label><input id="recipePressAgeCustom" placeholder="t.ex. 36 h"></div>'+
+      '</div>'+
+      '<div class="grid grid-3">'+
+        '<div><label>MPa</label><input id="recipePressMPa" type="number" min="0" step="0.1" placeholder="t.ex. 12.5"></div>'+
+        '<div><label>Prov-ID / notering</label><input id="recipePressNote" placeholder="valfritt"></div>'+
+        '<div style="align-self:end"><button type="button" class="btn" id="btnSaveRecipePress">Spara resultat</button></div>'+
+      '</div>'+
+      '<div style="margin-top:.75rem"><h4 style="margin:.25rem 0">Registrerade resultat</h4><div id="recipePressList" class="pill">Inga resultat ännu.</div></div>'+
+    '</form>';
+    document.body.appendChild(dialog);
+
+    dialog.querySelector('[data-close-press]')?.addEventListener('click', () => dialog.close());
+    document.getElementById('btnSaveRecipePress')?.addEventListener('click', savePressResult);
+  }
+
+  function renderPressList(recipe){
+    const list = document.getElementById('recipePressList');
+    if (!list) return;
+    const rows = Array.isArray(recipe?.earlyPressResults) ? recipe.earlyPressResults : [];
+    if (!rows.length){ list.innerHTML = 'Inga resultat ännu.'; return; }
+    list.innerHTML = '<table><thead><tr><th>Datum</th><th>Ålder</th><th>MPa</th><th>Notering</th><th></th></tr></thead><tbody>'+
+      rows.map((r, i) => '<tr><td>'+esc(r.date||'')+'</td><td>'+esc(r.age||'')+'</td><td>'+fmtNum(r.mpa,1)+'</td><td>'+esc(r.note||'')+'</td><td><button type="button" class="btn danger" data-del-press="'+i+'">Ta bort</button></td></tr>').join('')+
+      '</tbody></table>';
+    list.querySelectorAll('[data-del-press]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const idx = Number(btn.dataset.delPress);
+        if (!confirm('Ta bort resultatet?')) return;
+        const id = document.getElementById('recipePressRecipeId')?.value;
+        const r = (RECIPES||[]).find(x => x.id === id || x.cloudId === id);
+        if (!r) return;
+        r.earlyPressResults = (r.earlyPressResults||[]).filter((_, j) => j !== idx);
+        const saved = await saveRecipeToSupabase(r);
+        if (saved){
+          RECIPES = RECIPES.map(x => (x.id === r.id || x.cloudId === r.cloudId) ? saved : x);
+          renderPressList(saved);
+          if (typeof renderRecipes === 'function') renderRecipes();
+        }
+      });
+    });
+  }
+
+  function openPressDialog(recipe){
+    ensureDialog();
+    const dialog = document.getElementById('recipePressDialog');
+    if (!dialog || !recipe) return;
+    document.getElementById('recipePressTitle').textContent = 'Tidiga tryckresultat – ' + (recipe.name || 'recept');
+    document.getElementById('recipePressRecipeId').value = recipe.id || recipe.cloudId;
+    document.getElementById('recipePressDate').value = today();
+    document.getElementById('recipePressMPa').value = '';
+    document.getElementById('recipePressNote').value = '';
+    document.getElementById('recipePressAgePreset').value = '18h';
+    document.getElementById('recipePressAgeCustom').value = '';
+    renderPressList(recipe);
+    dialog.showModal();
+  }
+
+  async function savePressResult(){
+    const id = document.getElementById('recipePressRecipeId')?.value;
+    const recipe = (RECIPES||[]).find(r => r.id === id || r.cloudId === id);
+    if (!recipe){ alert('Kunde inte hitta receptet.'); return; }
+    const mpa = Number(document.getElementById('recipePressMPa')?.value);
+    if (!Number.isFinite(mpa) || mpa <= 0){ alert('Ange MPa.'); return; }
+    const result = {
+      id: (typeof uuid === 'function') ? uuid() : String(Date.now()),
+      date: document.getElementById('recipePressDate')?.value || today(),
+      age: ageLabelValue(),
+      mpa,
+      note: document.getElementById('recipePressNote')?.value || '',
+      createdAt: new Date().toISOString()
+    };
+    recipe.earlyPressResults = Array.isArray(recipe.earlyPressResults) ? recipe.earlyPressResults : [];
+    recipe.earlyPressResults.push(result);
+    const saved = await saveRecipeToSupabase(recipe);
+    if (!saved) return;
+    RECIPES = RECIPES.map(r => (r.id === recipe.id || r.cloudId === recipe.cloudId) ? saved : r);
+    renderPressList(saved);
+    if (typeof renderRecipes === 'function') renderRecipes();
+  }
+
+  function pressSummary(recipe){
+    const rows = Array.isArray(recipe?.earlyPressResults) ? recipe.earlyPressResults : [];
+    if (!rows.length) return '<small class="muted">Inga tidiga MPa</small>';
+    return '<small class="muted">MPa: '+ rows.map(r => esc(r.age)+': '+fmtNum(r.mpa,1)).join(' • ') + '</small>';
+  }
+
+  function recipePdf(recipe){
+    const mats = Array.isArray(recipe.materials) ? recipe.materials : [];
+    const gwp = (typeof gwpPerM3FromRecipe === 'function') ? gwpPerM3FromRecipe(recipe, MATERIALS||[]) : NaN;
+    const exposure = recipe.exposureAssessment || (typeof assessRecipeExposure === 'function' ? assessRecipeExposure({vctEq:recipe.vctEq, airReq:recipe.airReq, dmaxClass:recipe.dmaxClass||'gt16', binderCategory:recipe.binderCategory||'standard'}) : null);
+    const exposureTxt = exposure?.classes?.length ? exposure.classes.join(', ') : '—';
+    const warnings = exposure?.warnings?.length ? '<ul>'+exposure.warnings.map(w=>'<li>'+esc(w)+'</li>').join('')+'</ul>' : '—';
+    const matRows = mats.map(m => '<tr><td>'+esc(m.type||'')+'</td><td>'+esc(m.name||'')+'</td><td class="right">'+fmtNum(m.amount,2)+'</td><td class="right">'+(m.k??'')+'</td><td>'+esc(m.note||'')+'</td></tr>').join('') || '<tr><td colspan="5">Inga material.</td></tr>';
+    const pressRows = (recipe.earlyPressResults||[]).map(r => '<tr><td>'+esc(r.date||'')+'</td><td>'+esc(r.age||'')+'</td><td class="right">'+fmtNum(r.mpa,1)+'</td><td>'+esc(r.note||'')+'</td></tr>').join('') || '<tr><td colspan="4">Inga MPa-resultat registrerade.</td></tr>';
+    const html = '<h1>Receptblad</h1>'+
+      '<div class="meta">Recept: <b>'+esc(recipe.name||'')+'</b> • Hållfasthet: '+esc(recipe.strength||'')+' • Källa: BTG Quality Control</div>'+
+      '<h2>Sammanfattning</h2><table><tbody>'+
+      '<tr><th>VCT</th><td>'+fmtNum(recipe.vct,3)+'</td><th>VCTekv</th><td>'+fmtNum(recipe.vctEq,3)+'</td></tr>'+
+      '<tr><th>Luftkrav</th><td>'+fmtNum(recipe.airReq,1)+' %</td><th>GWP</th><td>'+fmtNum(gwp,1)+' kgCO₂e/m³</td></tr>'+
+      '<tr><th>Exponeringsklasser</th><td colspan="3">'+esc(exposureTxt)+'</td></tr>'+
+      '<tr><th>Kommentar/varning</th><td colspan="3">'+warnings+'</td></tr>'+
+      '</tbody></table>'+
+      '<h2>Material</h2><table><thead><tr><th>Typ</th><th>Namn</th><th class="right">Mängd</th><th class="right">k</th><th>Notering</th></tr></thead><tbody>'+matRows+'</tbody></table>'+
+      '<h2>Tidiga tryckresultat</h2><table><thead><tr><th>Datum</th><th>Ålder</th><th class="right">MPa</th><th>Notering</th></tr></thead><tbody>'+pressRows+'</tbody></table>';
+    if (typeof openPrintWindow === 'function') openPrintWindow('Receptblad – ' + (recipe.name||''), html);
+    else {
+      const w = window.open('', '_blank');
+      w.document.write('<html><body>'+html+'</body></html>');
+      w.document.close();
+      w.print();
+    }
+  }
+
+  function addRecipeButtons(){
+    const tbody = document.querySelector('#recipesTable tbody');
+    if (!tbody || !Array.isArray(RECIPES)) return;
+    Array.from(tbody.querySelectorAll('tr')).forEach((tr, idx) => {
+      if (tr.__btgRecipeButtons) return;
+      const recipe = RECIPES[idx];
+      if (!recipe) return;
+      const toolbar = tr.querySelector('.toolbar');
+      if (!toolbar) return;
+      const mpaBtn = document.createElement('button');
+      mpaBtn.type = 'button';
+      mpaBtn.className = 'btn secondary';
+      mpaBtn.textContent = 'MPa';
+      mpaBtn.addEventListener('click', () => openPressDialog(recipe));
+      const pdfBtn = document.createElement('button');
+      pdfBtn.type = 'button';
+      pdfBtn.className = 'btn secondary';
+      pdfBtn.textContent = 'PDF';
+      pdfBtn.addEventListener('click', () => recipePdf(recipe));
+      toolbar.insertBefore(mpaBtn, toolbar.firstChild);
+      toolbar.insertBefore(pdfBtn, toolbar.firstChild);
+      const cells = tr.querySelectorAll('td');
+      if (cells.length >= 8){
+        const summary = document.createElement('div');
+        summary.innerHTML = pressSummary(recipe);
+        cells[0].appendChild(summary);
+      }
+      tr.__btgRecipeButtons = true;
+    });
+  }
+
+  function installRenderPatch(){
+    if (typeof renderRecipes !== 'function' || renderRecipes.__btgPressPatched) return;
+    const originalRenderRecipes = renderRecipes;
+    renderRecipes = function(){
+      const out = originalRenderRecipes.apply(this, arguments);
+      setTimeout(addRecipeButtons, 0);
+      return out;
+    };
+    renderRecipes.__btgPressPatched = true;
+
+    if (typeof saveRecipeToSupabase === 'function' && !saveRecipeToSupabase.__btgPressMergePatched){
+      const originalSave = saveRecipeToSupabase;
+      saveRecipeToSupabase = async function(recipe){
+        try{
+          const existing = (RECIPES||[]).find(r => r.id === recipe.id || r.cloudId === recipe.cloudId);
+          if (existing && Array.isArray(existing.earlyPressResults) && !Array.isArray(recipe.earlyPressResults)){
+            recipe.earlyPressResults = existing.earlyPressResults;
+          }
+        }catch(e){}
+        return originalSave.apply(this, arguments);
+      };
+      saveRecipeToSupabase.__btgPressMergePatched = true;
+    }
+  }
+
+  onReady(function(){
+    ensureDialog();
+    installDeviationScopeFix();
+    installRenderPatch();
+    setTimeout(() => { try { addRecipeButtons(); } catch(e){} }, 300);
+  });
+})();
+</script>
+<!-- ==== End v18.12.1 SAFE PATCH ==== -->
 
 </body>
 </html>
