@@ -9,7 +9,7 @@
     Baseras på fungerande v18.1.
     Demo-läge hanteras via separat Supabase-demoanvändare, inte via inbyggd demo-data.
   -->
-  <title>BTG Quality Control – sidebar cloud quality management</title>
+  <title>BTG Quality Control – v19.4 Live 27/5-26</title>
   <style>
     :root {
       --bg: #0f172a; --panel: #111827; --panel-2: #1f2937; --text: #e5e7eb; --muted: #9ca3af;
@@ -661,6 +661,14 @@
             <select id="batchStrengthFilter"></select>
           </div>
           <div>
+            <label>Typ</label>
+            <select id="batchSourceFilter">
+              <option value="">Alla</option>
+              <option value="prefab">Prefab</option>
+              <option value="order">Beställning</option>
+            </select>
+          </div>
+          <div>
             <label>Datumintervall</label>
             <div class="row"><input type="date" id="batchDateFrom"><input type="date" id="batchDateTo"></div>
           </div>
@@ -676,7 +684,7 @@
         <div style="overflow:auto; max-height: 420px; margin-top:.5rem">
           <table id="batchesTable">
             <thead><tr>
-              <th>Datum</th><th>Recept</th><th>Hållfasthet</th><th>Mängd (m³)</th><th>VCT</th><th>VCT<sub>ekv</sub></th><th>GWP (kgCO₂e/m³)</th><th>GWP total (kgCO₂e)</th><th></th>
+              <th>Datum</th><th>Recept</th><th>Hållfasthet</th><th>Typ</th><th>Mängd (m³)</th><th>VCT</th><th>VCT<sub>ekv</sub></th><th>GWP (kgCO₂e/m³)</th><th>GWP total (kgCO₂e)</th><th></th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -1122,24 +1130,6 @@
       </div>
     </form>
   </dialog>
-
-  <!-- Här kommer hela JavaScript-koden för appen (identisk med den vi byggt, inkl. Nordcert-funktionerna) -->
-  
-  /* === All JS-kod från vår tidigare version, inklusive:
-         - Persistens (LocalStorage)
-         - Material/Recept/Satser/Beställningar/Provkuber/Luftprov
-         - Kontroll (instrument + månadskontroller)
-         - Dagbok + Intransporter
-         - Dashboard + Utvärdering (stat + EN206)
-         - Exporter (PDF/JSON) + Full backup Import/Export
-         - Uppgifter (daily/weekly/monthly)
-         - Nordcert-knappen + dialog + exportNordcertReportGUI()
-     ===
-     OBS: För läsbarhet i detta svar är koden starkt förkortad här.
-     I din riktiga fil behöver du klistra in HELA JS-blocket jag gav i tidigare meddelandet
-     med alla funktioner (det långa scriptet). Om du vill kan jag posta den kompletta
-     JS-delen igen i nästa meddelande – säg bara till med "skicka hela JS" så får du allt 1:1.
-  */
 
 <!-- ==== Injected dialogs (resilient) ==== -->
 
@@ -3055,8 +3045,12 @@ const fails = [];
     const from = document.getElementById('batchDateFrom').value;
     const to = document.getElementById('batchDateTo').value;
     const strength = document.getElementById('batchStrengthFilter').value;
+    const sourceFilter = document.getElementById('batchSourceFilter')?.value || '';
     let list = [...BATCHES];
-    list = list.filter(b=> (!from || b.dateTime.slice(0,10)>=from) && (!to || b.dateTime.slice(0,10)<=to) && (!strength || b.strength===strength));
+    list = list.filter(b=> {
+      const batchType = (b.productionType || b.app_data?.productionType || b.app_data?.production_type || (b.source === 'customer_order' ? 'order' : (b.source === 'prefab_queue' ? 'prefab' : '')));
+      return (!from || b.dateTime.slice(0,10)>=from) && (!to || b.dateTime.slice(0,10)<=to) && (!strength || b.strength===strength) && (!sourceFilter || batchType === sourceFilter);
+    });
     let updated=false;
     for (const b of list){ ensureBatchGwp(b) && (updated=true); }
     // Cloud-first: GWP uppdateras i minnet här; vid ändring sparas raden via Supabase i redigeringsflödet.
@@ -3071,6 +3065,7 @@ const fails = [];
         <td>${fmtDate(b.dateTime)}</td>
         <td>${b.recipeName}</td>
         <td>${b.strength||''}</td>
+        <td>${((b.productionType || b.app_data?.productionType || b.app_data?.production_type || (b.source === 'customer_order' ? 'order' : (b.source === 'prefab_queue' ? 'prefab' : ''))) === 'order') ? 'Beställning' : (((b.productionType || b.app_data?.productionType || b.app_data?.production_type || b.source) ? 'Prefab' : '—'))}</td>
         <td>${b.amount}</td>
         <td>${(b.vct??0).toFixed(3)}</td>
         <td>${(b.vctEq??0).toFixed(3)}</td>
@@ -3094,6 +3089,7 @@ const fails = [];
     }
   }
   document.getElementById('btnApplyBatchFilters')?.addEventListener('click', renderBatches);
+  document.getElementById('batchSourceFilter')?.addEventListener('change', renderBatches);
   document.getElementById('btnExportBatches')?.addEventListener('click', ()=> downloadJSON('batches.json', BATCHES));
   document.getElementById('btnExportBatchesPDF')?.addEventListener('click', exportBatchesPDF);
   document.getElementById('btnImportBatches')?.addEventListener('click', ()=> document.getElementById('importBatchesFile').click());
@@ -4496,15 +4492,41 @@ const fails = [];
       openPrintWindow('Beställningsjournal', html);
     }
     function batchesReportHTML(list){
-      list = list||[];
-      const rows = list.map(b=> `<tr>
-        <td>${fmtDate(b.dateTime)}</td><td>${escapeHtml(b.recipeName)}</td><td>${escapeHtml(b.strength||'')}</td>
-        <td class="right">${b.amount}</td><td class="right">${(b.vct??0).toFixed(3)}</td><td class="right">${(b.vctEq??0).toFixed(3)}</td>
-        <td class="right">${(b.gwpPerM3??0).toFixed(1)}</td><td class="right">${(b.gwpTotal??0).toFixed(1)}</td>
-      </tr>`).join('') || '<tr><td colspan="8">—</td></tr>';
-      return `<table>
-        <thead><tr><th>Datum</th><th>Recept</th><th>Hållfasthet</th><th>Mängd</th><th>VCT</th><th>VCT ekv</th><th>GWP/m³</th><th>GWP total</th></tr></thead>
-        <tbody>${rows}</tbody></table>`;
+      list = list || [];
+      const grouped = new Map();
+      let totalM3 = 0;
+      for (const b of list){
+        const recipe = b.recipeName || 'Okänt recept';
+        const amount = parseFloat(b.amount || b.amount_m3 || 0) || 0;
+        totalM3 += amount;
+        if (!grouped.has(recipe)) grouped.set(recipe, { recipeName: recipe, strength: b.strength || '', count: 0, total: 0, rows: [] });
+        const g = grouped.get(recipe);
+        g.count += 1;
+        g.total += amount;
+        if (!g.strength && b.strength) g.strength = b.strength;
+        g.rows.push(b);
+      }
+      const sections = Array.from(grouped.values()).sort((a,b)=>a.recipeName.localeCompare(b.recipeName, 'sv')).map(g => {
+        const detailRows = g.rows.map(b => {
+          const typeRaw = b.productionType || b.app_data?.productionType || b.app_data?.production_type || (b.source === 'customer_order' ? 'order' : (b.source === 'prefab_queue' ? 'prefab' : ''));
+          const typeTxt = typeRaw === 'order' ? 'Beställning' : (typeRaw ? 'Prefab' : '—');
+          return `<tr>
+            <td>${fmtDate(b.dateTime)}</td>
+            <td>${escapeHtml(typeTxt)}</td>
+            <td class="right">${(parseFloat(b.amount || 0) || 0).toFixed(2)}</td>
+            <td class="right">${(b.vct ?? 0).toFixed(3)}</td>
+            <td class="right">${(b.vctEq ?? 0).toFixed(3)}</td>
+            <td class="right">${(b.gwpTotal ?? 0).toFixed(1)}</td>
+          </tr>`;
+        }).join('');
+        return `<h2 style="margin-top:18px">${escapeHtml(g.recipeName)}${g.strength ? ' – '+escapeHtml(g.strength) : ''}</h2>
+          <p><b>Antal poster:</b> ${g.count} &nbsp; <b>Total mängd:</b> ${g.total.toFixed(2)} m³</p>
+          <table>
+            <thead><tr><th>Datum</th><th>Typ</th><th class="right">Mängd (m³)</th><th class="right">VCT</th><th class="right">VCT ekv</th><th class="right">GWP total</th></tr></thead>
+            <tbody>${detailRows || '<tr><td colspan="6">—</td></tr>'}</tbody>
+          </table>`;
+      }).join('') || '<p>Inga satser i vald period.</p>';
+      return `${sections}<h2 style="margin-top:22px;border-top:1px solid #ddd;padding-top:12px">Totalt för perioden: ${totalM3.toFixed(2)} m³</h2>`;
     }
     function ordersReportHTML(list){
       list = list||[];
@@ -4552,7 +4574,13 @@ const fails = [];
           .meta{color:#555;margin:2px 0 8px;font-size:12px}
           .report-footer{margin-top:16px;color:#555;font-size:11px;border-top:1px solid #ddd;padding-top:8px}
         </style>`;
-      win.document.write(`<html><head><title>${escapeHtml(title)}</title>${styles}</head><body>${innerHTML}<div class="report-footer">Rapport genererad ${escapeHtml(new Date().toLocaleString('sv-SE'))} från BTGkontroll.</div></body></html>`);
+      win.document.write(`<html><head><title>${escapeHtml(title)}</title>${styles}</head><body>${innerHTML}<div class="report-footer">Rapport genererad ${escapeHtml(new Date().toLocaleString('sv-SE'))} från BTGkontroll.</div>
+<!-- =========================================================
+     v19.5.10 DASHBOARD TAB VISIBILITY FIX
+     Dashboard ska inte tvingas visas ovanför andra flikar för superadmin.
+     Ingen behörighetslogik ändrad.
+========================================================= -->
+</body></html>`);
       win.document.close();
       win.focus();
       win.print();
@@ -6076,9 +6104,6 @@ function renderEvalKrav(){
   #prefabQueueTable tr.drag-over td { background: rgba(56,189,248,.10); }
   @media (max-width:900px){ .prefab-checkbox-grid { grid-template-columns: repeat(3, minmax(70px,1fr)); } }
   @media (max-width:560px){ .prefab-checkbox-grid { grid-template-columns: repeat(2, minmax(70px,1fr)); } }
-  .prefab-searchbar { display:flex; gap:.5rem; flex-wrap:wrap; align-items:flex-end; margin-top:.5rem; }
-  .prefab-searchbar > div { min-width: 180px; flex: 1; }
-  .prefab-searchbar .prefab-search-actions { flex: 0 0 auto; min-width: auto; }
 </style>
 <script id="prefab-queue-v18-7-script">
 /***********************************************************
@@ -6204,24 +6229,6 @@ function renderEvalKrav(){
         <div class="toolbar" style="margin-bottom:.5rem">
           <span class="pill" id="prefabQueueSummary">Ingen kö laddad.</span>
         </div>
-        <div class="prefab-searchbar" id="prefabSearchBar">
-          <div>
-            <label>Sök i kö</label>
-            <input id="prefabSearchInput" type="search" placeholder="Sök littra, bord, beställare, sats-ID, status...">
-          </div>
-          <div>
-            <label>Status</label>
-            <select id="prefabStatusFilter">
-              <option value="">Alla</option>
-              <option value="new">Ny</option>
-              <option value="confirmed">Bekräftad</option>
-              <option value="done">Klar</option>
-            </select>
-          </div>
-          <div class="prefab-search-actions">
-            <button class="btn secondary" id="btnClearPrefabSearch" type="button">Rensa sök/filter</button>
-          </div>
-        </div>
         <div style="overflow:auto; max-height:520px; margin-top:.5rem">
           <table id="prefabQueueTable">
             <thead><tr>
@@ -6259,28 +6266,6 @@ function renderEvalKrav(){
 
     document.getElementById('btnAddPrefabRequest')?.addEventListener('click', savePrefabRequest);
     document.getElementById('btnRefreshPrefabQueue')?.addEventListener('click', loadPrefabModule);
-
-    const searchInput = document.getElementById('prefabSearchInput');
-    const statusFilter = document.getElementById('prefabStatusFilter');
-    const clearSearch = document.getElementById('btnClearPrefabSearch');
-    if (searchInput && !searchInput.dataset.ready){
-      searchInput.dataset.ready = '1';
-      searchInput.addEventListener('input', renderPrefabQueue);
-    }
-    if (statusFilter && !statusFilter.dataset.ready){
-      statusFilter.dataset.ready = '1';
-      statusFilter.addEventListener('change', renderPrefabQueue);
-    }
-    if (clearSearch && !clearSearch.dataset.ready){
-      clearSearch.dataset.ready = '1';
-      clearSearch.addEventListener('click', ()=>{
-        const s = document.getElementById('prefabSearchInput');
-        const f = document.getElementById('prefabStatusFilter');
-        if (s) s.value = '';
-        if (f) f.value = '';
-        renderPrefabQueue();
-      });
-    }
   }
 
   function ensurePrefabDashboardCard(){
@@ -6537,6 +6522,20 @@ function renderEvalKrav(){
                 }).join('')}
               </select>
             </div>
+            <div>
+              <label>Rapporttyp</label>
+              <select id="prefabCompleteProductionType">
+                <option value="prefab">Prefab</option>
+                <option value="order">Beställning</option>
+              </select>
+            </div>
+            <div id="prefabCompleteCustomerWrap" style="display:none">
+              <label>Kund vid beställning</label>
+              <select id="prefabCompleteCustomer">
+                <option value="">— välj kund —</option>
+                ${(CUSTOMERS||[]).map(c=>`<option value="${esc(c.cloudId || c.id)}">${esc(c.name || '')}</option>`).join('')}
+              </select>
+            </div>
           </div>
           <div id="prefabRecipePreview" class="pill" style="margin-top:.6rem">Välj recept för att beräkna VCT/VCTekv/GWP.</div>
           <div class="row" style="justify-content:flex-end;gap:.5rem;margin-top:.8rem;">
@@ -6548,7 +6547,15 @@ function renderEvalKrav(){
       document.body.appendChild(dlg);
       const batchInput = dlg.querySelector('#prefabCompleteBatchId');
       const recipeSelect = dlg.querySelector('#prefabCompleteRecipe');
+      const typeSelect = dlg.querySelector('#prefabCompleteProductionType');
+      const customerWrap = dlg.querySelector('#prefabCompleteCustomerWrap');
+      const customerSelect = dlg.querySelector('#prefabCompleteCustomer');
       const preview = dlg.querySelector('#prefabRecipePreview');
+      const updateCustomerVisibility = () => {
+        if (customerWrap) customerWrap.style.display = typeSelect?.value === 'order' ? '' : 'none';
+      };
+      typeSelect?.addEventListener('change', updateCustomerVisibility);
+      updateCustomerVisibility();
 
       const updatePreview = () => {
         const recipe = recipes.find(r => String(r.cloudId || r.id) === String(recipeSelect.value));
@@ -6573,9 +6580,12 @@ function renderEvalKrav(){
       dlg.querySelector('#btnPrefabCompleteSave')?.addEventListener('click', ()=>{
         const batchId = String(batchInput.value || '').trim();
         const recipe = recipes.find(r => String(r.cloudId || r.id) === String(recipeSelect.value));
+        const productionType = typeSelect?.value || 'prefab';
+        const customer = (CUSTOMERS || []).find(c => String(c.cloudId || c.id) === String(customerSelect?.value || '')) || null;
         if (!batchId){ alert('Sats-ID krävs för att markera beställningen som klar.'); return; }
         if (!recipe){ alert('Välj vilket recept som användes.'); return; }
-        close({ batchId, recipe });
+        if (productionType === 'order' && !customer){ alert('Välj kund när rapporttypen är Beställning.'); return; }
+        close({ batchId, recipe, productionType, customer });
       });
       dlg.addEventListener('cancel', (e)=>{ e.preventDefault(); close(null); });
       dlg.showModal();
@@ -6589,6 +6599,8 @@ function renderEvalKrav(){
     if (!details) return;
     const cleaned = details.batchId;
     const recipe = details.recipe;
+    const productionType = details.productionType || 'prefab';
+    const customer = details.customer || null;
     const recipeCloudId = recipe.cloudId || recipe.id;
     const gwpPerM3 = (typeof gwpPerM3FromRecipe === 'function') ? gwpPerM3FromRecipe(recipe, MATERIALS || []) : 0;
     const amount = Number(req?.amount_m3 || 0) || 0;
@@ -6610,7 +6622,10 @@ function renderEvalKrav(){
         gwpPerM3,
         gwpTotal,
         batchId: cleaned,
-        source: 'prefab_queue',
+        source: productionType === 'order' ? 'customer_order' : 'prefab_queue',
+        productionType,
+        customerId: customer ? (customer.cloudId || customer.id) : null,
+        customerName: customer ? (customer.name || '') : '',
         prefabRequestId: req?.id,
         prefabFactoryId: req?.factory_id,
         exposureClasses: req?.exposure_classes || [],
@@ -6644,7 +6659,10 @@ function renderEvalKrav(){
         recipe_vct_eq: batchObj.vctEq,
         gwp_per_m3: gwpPerM3,
         gwp_total: gwpTotal,
-        manufacturing_batch_id: createdBatch?.cloudId || createdBatch?.id || null
+        manufacturing_batch_id: createdBatch?.cloudId || createdBatch?.id || null,
+        production_type: productionType,
+        customer_id: customer ? (customer.cloudId || customer.id) : null,
+        customer_name: customer ? (customer.name || '') : ''
       };
 
       const { error } = await sb.from('prefab_requests').update({
@@ -6685,6 +6703,8 @@ function renderEvalKrav(){
       ['VCT', (r.vct ?? r.app_data?.vct ?? '—')],
       ['Exponeringsklasser', (r.exposure_classes||[]).join(', ')],
       ['Mängd', `${Number(r.amount_m3||0).toFixed(2)} m³`],
+      ['Rapporttyp', (r.app_data?.production_type === 'order' ? 'Beställning' : 'Prefab')],
+      ['Kund', r.app_data?.customer_name || '—'],
       ['Littra / ritningsnr', r.drawing_no],
       ['Beställare', r.requester_name],
       ['Sats-ID', r.batch_id || r.app_data?.batch_id || '—'],
@@ -6709,39 +6729,6 @@ function renderEvalKrav(){
     }
   }
 
-  function getPrefabFilteredRequests(){
-    const q = String(document.getElementById('prefabSearchInput')?.value || '').trim().toLowerCase();
-    const status = String(document.getElementById('prefabStatusFilter')?.value || '').trim();
-    let list = Array.isArray(PREFAB_REQUESTS) ? [...PREFAB_REQUESTS] : [];
-    if (status) list = list.filter(r => String(r.status || '') === status);
-    if (q){
-      list = list.filter(r => {
-        const haystack = [
-          r.created_at,
-          r.request_date,
-          statusLabel(r.status),
-          r.status,
-          r.table_no,
-          r.strength,
-          r.vct,
-          ...(Array.isArray(r.exposure_classes) ? r.exposure_classes : []),
-          r.amount_m3,
-          r.drawing_no,
-          r.requester_name,
-          r.batch_id,
-          r.used_recipe_name,
-          r.gwp_total,
-          r.note,
-          r.app_data?.batch_id,
-          r.app_data?.used_recipe_name,
-          r.app_data?.gwp_total
-        ].filter(v => v !== null && v !== undefined).join(' ').toLowerCase();
-        return haystack.includes(q);
-      });
-    }
-    return list;
-  }
-
   function renderPrefabQueue(){
     const tbody = document.querySelector('#prefabQueueTable tbody');
     const summary = document.getElementById('prefabQueueSummary');
@@ -6752,20 +6739,14 @@ function renderEvalKrav(){
       tbody.innerHTML = '<tr><td colspan="16">Skapa eller anslut till en fabrik för att visa kön.</td></tr>';
       return;
     }
-    const list = getPrefabFilteredRequests();
     const unconfirmed = PREFAB_REQUESTS.filter(r=>r.status==='new').length;
     const open = PREFAB_REQUESTS.filter(r=>['new','confirmed','in_progress'].includes(r.status)).length;
-    const isFiltered = (document.getElementById('prefabSearchInput')?.value || document.getElementById('prefabStatusFilter')?.value);
-    if (summary) summary.textContent = `${PREFAB_REQUESTS.length} beställningar totalt • ${unconfirmed} nya/obekräftade • ${open} öppna${isFiltered ? ` • visar ${list.length}` : ''}`;
+    if (summary) summary.textContent = `${PREFAB_REQUESTS.length} beställningar totalt • ${unconfirmed} nya/obekräftade • ${open} öppna`;
     if (!PREFAB_REQUESTS.length){
       tbody.innerHTML = '<tr><td colspan="16">Inga beställningar ännu.</td></tr>';
       return;
     }
-    if (!list.length){
-      tbody.innerHTML = '<tr><td colspan="16">Inga beställningar matchar sökningen/filtret.</td></tr>';
-      return;
-    }
-    for (const r of list){
+    for (const r of PREFAB_REQUESTS){
       const tr = document.createElement('tr');
       tr.dataset.prefabId = r.id;
       if (canManageQueue()) tr.draggable = true;
@@ -7340,248 +7321,2929 @@ function renderEvalKrav(){
 
 
 
-<!-- ==== v18.12.1 SAFE PATCH: recipe early press results + recipe PDF + dashboard deviation scope ==== -->
-<script id="recipe-press-pdf-v18-12-1-safe">
+<!-- SAFE PATCH v19.1.1: Browser-notiser för Prefabkö. Isolerad patch, ändrar inte dashboardens HTML. -->
+<style id="prefab-notifications-v19-1-1-style">
+  #btnEnablePrefabNotifications { white-space: nowrap; }
+  .prefab-notification-note { color: var(--muted); font-size:.82rem; }
+</style>
+<script id="prefab-notifications-v19-1-1-script">
 (function(){
-  'use strict';
+  const PATCH_ID = 'prefab-notifications-v19-1-1';
+  let knownNewIds = new Set();
+  let firstRun = true;
+  let timer = null;
+  let lastFactoryId = null;
 
-  function onReady(fn){
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
-    else fn();
+  function log(){ try { console.log('[BTG notifications]', ...arguments); } catch(_){} }
+  function currentUserSafe(){ try { return (typeof CURRENT_USER !== 'undefined') ? CURRENT_USER : null; } catch(_) { return null; } }
+  async function getUserId(){
+    try {
+      if (currentUserSafe()?.id) return currentUserSafe().id;
+      if (window.sb?.auth?.getUser){
+        const { data } = await sb.auth.getUser();
+        return data?.user?.id || null;
+      }
+    } catch(_) {}
+    return null;
   }
-
-  function esc(str){
-    if (typeof escapeHtml === 'function') return escapeHtml(str);
-    return String(str == null ? '' : str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  function fmt(v){ return String(v == null ? '' : v); }
+  function playSound(){
+    try{
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(1175, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.5);
+      setTimeout(()=>ctx.close?.(), 800);
+    } catch(e){ log('Ljud blockerades', e); }
   }
-
-  function fmtNum(v, d){
-    const n = Number(v);
-    return Number.isFinite(n) ? n.toFixed(d == null ? 2 : d) : '—';
-  }
-
-  function today(){ return new Date().toISOString().slice(0,10); }
-
-  function ageLabelValue(){
-    const sel = document.getElementById('recipePressAgePreset');
-    const custom = document.getElementById('recipePressAgeCustom');
-    if (!sel) return '';
-    if (sel.value === 'custom') return (custom?.value || '').trim();
-    return sel.options[sel.selectedIndex]?.textContent || sel.value;
-  }
-
-  function ensureDashboardClass(){
-    const active = document.querySelector('.tab-btn[aria-current="page"]');
-    const tab = active?.dataset?.tab || 'dashboard';
-    document.body.classList.toggle('btg-tab-dashboard', tab === 'dashboard');
-  }
-
-  function installDeviationScopeFix(){
-    if (!document.getElementById('deviation-scope-fix-v18-12-1')){
-      const style = document.createElement('style');
-      style.id = 'deviation-scope-fix-v18-12-1';
-      style.textContent = 'body:not(.btg-tab-dashboard) #deviationDashCard{display:none!important;}';
-      document.head.appendChild(style);
+  function canNotify(){ return 'Notification' in window && Notification.permission === 'granted'; }
+  function notifyOrder(r){
+    const title = 'Ny prefab-beställning';
+    const body = [
+      r.table_no ? 'Bord: ' + r.table_no : '',
+      r.strength ? 'Hållfasthet: ' + r.strength : '',
+      r.amount_m3 ? 'Mängd: ' + r.amount_m3 + ' m³' : '',
+      r.drawing_no ? 'Littra: ' + r.drawing_no : '',
+      r.requester_name ? 'Beställare: ' + r.requester_name : ''
+    ].filter(Boolean).join(' • ');
+    playSound();
+    if (canNotify()){
+      try{
+        const n = new Notification(title, { body, tag: 'prefab-' + r.id, renotify: true });
+        n.onclick = function(){
+          window.focus();
+          try { if (typeof setTab === 'function') setTab('prefab'); } catch(_){}
+          n.close();
+        };
+      } catch(e){ log('Notis kunde inte visas', e); }
     }
-    ensureDashboardClass();
-    document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
-      if (btn.__btgDevScopeFix) return;
-      btn.__btgDevScopeFix = true;
-      btn.addEventListener('click', () => setTimeout(ensureDashboardClass, 0));
-    });
   }
-
-  function ensureDialog(){
-    if (document.getElementById('recipePressDialog')) return;
-    const dialog = document.createElement('dialog');
-    dialog.id = 'recipePressDialog';
-    dialog.innerHTML = '<form method="dialog" id="recipePressForm" class="container" novalidate>'+
-      '<div class="row" style="justify-content:space-between;align-items:center;">'+
-        '<h3 id="recipePressTitle">Tidigt tryckresultat</h3>'+
-        '<button type="button" class="btn secondary" data-close-press>Stäng</button>'+
-      '</div>'+
-      '<p class="pill">Registrera tidiga tryckresultat, t.ex. 18 h eller 1 dygn. Resultaten sparas på receptet och kommer med i recept-PDF.</p>'+
-      '<input id="recipePressRecipeId" type="hidden">'+
-      '<div class="grid grid-3">'+
-        '<div><label>Provdatum</label><input id="recipePressDate" type="date"></div>'+
-        '<div><label>Ålder</label><select id="recipePressAgePreset"><option value="18h">18 h</option><option value="24h">1 dygn</option><option value="48h">2 dygn</option><option value="7d">7 dygn</option><option value="custom">Egen</option></select></div>'+
-        '<div><label>Egen ålder/tid</label><input id="recipePressAgeCustom" placeholder="t.ex. 36 h"></div>'+
-      '</div>'+
-      '<div class="grid grid-3">'+
-        '<div><label>MPa</label><input id="recipePressMPa" type="number" min="0" step="0.1" placeholder="t.ex. 12.5"></div>'+
-        '<div><label>Prov-ID / notering</label><input id="recipePressNote" placeholder="valfritt"></div>'+
-        '<div style="align-self:end"><button type="button" class="btn" id="btnSaveRecipePress">Spara resultat</button></div>'+
-      '</div>'+
-      '<div style="margin-top:.75rem"><h4 style="margin:.25rem 0">Registrerade resultat</h4><div id="recipePressList" class="pill">Inga resultat ännu.</div></div>'+
-    '</form>';
-    document.body.appendChild(dialog);
-
-    dialog.querySelector('[data-close-press]')?.addEventListener('click', () => dialog.close());
-    document.getElementById('btnSaveRecipePress')?.addEventListener('click', savePressResult);
+  async function getFactoryId(){
+    if (!window.sb) return null;
+    const uid = await getUserId();
+    if (!uid) return null;
+    try{
+      const { data, error } = await sb.from('factory_members').select('factory_id, role').eq('user_id', uid).limit(1);
+      if (error) throw error;
+      const row = data && data[0];
+      return row?.factory_id || null;
+    }catch(e){ log('Kunde inte läsa factory_members', e); return null; }
   }
-
-  function renderPressList(recipe){
-    const list = document.getElementById('recipePressList');
-    if (!list) return;
-    const rows = Array.isArray(recipe?.earlyPressResults) ? recipe.earlyPressResults : [];
-    if (!rows.length){ list.innerHTML = 'Inga resultat ännu.'; return; }
-    list.innerHTML = '<table><thead><tr><th>Datum</th><th>Ålder</th><th>MPa</th><th>Notering</th><th></th></tr></thead><tbody>'+
-      rows.map((r, i) => '<tr><td>'+esc(r.date||'')+'</td><td>'+esc(r.age||'')+'</td><td>'+fmtNum(r.mpa,1)+'</td><td>'+esc(r.note||'')+'</td><td><button type="button" class="btn danger" data-del-press="'+i+'">Ta bort</button></td></tr>').join('')+
-      '</tbody></table>';
-    list.querySelectorAll('[data-del-press]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const idx = Number(btn.dataset.delPress);
-        if (!confirm('Ta bort resultatet?')) return;
-        const id = document.getElementById('recipePressRecipeId')?.value;
-        const r = (RECIPES||[]).find(x => x.id === id || x.cloudId === id);
-        if (!r) return;
-        r.earlyPressResults = (r.earlyPressResults||[]).filter((_, j) => j !== idx);
-        const saved = await saveRecipeToSupabase(r);
-        if (saved){
-          RECIPES = RECIPES.map(x => (x.id === r.id || x.cloudId === r.cloudId) ? saved : x);
-          renderPressList(saved);
-          if (typeof renderRecipes === 'function') renderRecipes();
+  async function poll(){
+    if (!window.sb) return;
+    const factoryId = await getFactoryId();
+    if (!factoryId) return;
+    if (factoryId !== lastFactoryId){
+      knownNewIds = new Set();
+      firstRun = true;
+      lastFactoryId = factoryId;
+    }
+    try{
+      const { data, error } = await sb
+        .from('prefab_requests')
+        .select('id, status, table_no, strength, amount_m3, drawing_no, requester_name, created_at')
+        .eq('factory_id', factoryId)
+        .eq('status', 'new')
+        .order('created_at', { ascending:false })
+        .limit(50);
+      if (error) throw error;
+      const rows = data || [];
+      const ids = new Set(rows.map(r=>r.id));
+      if (!firstRun){
+        rows.filter(r=>!knownNewIds.has(r.id)).forEach(notifyOrder);
+      }
+      knownNewIds = ids;
+      firstRun = false;
+    }catch(e){ log('Kunde inte polla prefab_requests', e); }
+  }
+  function notificationStatusText(){
+    if (!('Notification' in window)) return 'Notiser stöds inte i denna webbläsare';
+    if (Notification.permission === 'granted') return 'Notiser aktiverade';
+    if (Notification.permission === 'denied') return 'Notiser blockerade i webbläsaren';
+    return 'Notiser inte aktiverade';
+  }
+  function ensureButton(){
+    const card = document.getElementById('prefabRequestFormCard') || document.getElementById('tab-prefab');
+    if (!card || document.getElementById('btnEnablePrefabNotifications')) return;
+    const toolbar = card.querySelector('.toolbar') || card;
+    const btn = document.createElement('button');
+    btn.id = 'btnEnablePrefabNotifications';
+    btn.type = 'button';
+    btn.className = 'btn secondary';
+    btn.textContent = '🔔 Aktivera notiser';
+    btn.title = notificationStatusText();
+    btn.addEventListener('click', async ()=>{
+      if (!('Notification' in window)) { alert('Den här webbläsaren stödjer inte browser-notiser.'); return; }
+      try{
+        const perm = await Notification.requestPermission();
+        btn.title = notificationStatusText();
+        btn.textContent = perm === 'granted' ? '🔔 Notiser aktiva' : '🔕 Aktivera notiser';
+        if (perm === 'granted'){
+          playSound();
+          await poll();
+          alert('Notiser är aktiverade för prefab-beställningar.');
+        } else {
+          alert('Notiser aktiverades inte. Kontrollera webbläsarens behörigheter.');
         }
+      }catch(e){ alert('Kunde inte aktivera notiser.'); }
+    });
+    toolbar.appendChild(btn);
+  }
+  function start(){
+    ensureButton();
+    if (!timer){
+      poll();
+      timer = setInterval(()=>{ ensureButton(); poll(); }, 30000);
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+  window.addEventListener('focus', poll);
+})();
+</script>
+
+<!-- =====================================================
+     v19.3 AVFORMNINGSKUBER – isolerad patch
+     - Ny meny/flik utan att skriva om befintlig layout
+     - Läser gårdagens prefabgjutningar från BATCHES
+     - Sparar egen historik i Supabase-tabellen demoulding_cubes
+     ===================================================== -->
+<style id="btg-v19-3-demoulding-style">
+  #tab-avformningskuber .demoulding-status-line { display:flex; gap:.45rem; flex-wrap:wrap; align-items:center; }
+  #tab-avformningskuber .demoulding-input-row { display:grid; grid-template-columns: 110px 140px 160px minmax(180px,1fr) auto; gap:.45rem; align-items:end; }
+  #tab-avformningskuber .demoulding-input-row input { min-width:0; }
+  #tab-avformningskuber .demoulding-history-filters { align-items:end; }
+  #tab-avformningskuber .demoulding-small { display:block; color:var(--muted); font-size:.78rem; line-height:1.25; margin-top:.15rem; }
+  #tab-avformningskuber .demoulding-done-row td { opacity:.78; }
+  @media (max-width:1100px){
+    #tab-avformningskuber .demoulding-input-row { grid-template-columns: 1fr 1fr; }
+    #tab-avformningskuber .demoulding-input-row button { grid-column: 1 / -1; }
+  }
+  @media (max-width:560px){
+    #tab-avformningskuber .demoulding-input-row { grid-template-columns: 1fr; }
+  }
+</style>
+<script id="btg-v19-3-demoulding-script">
+/***********************************************************
+ * v19.3.1 – AVFORMNINGSKUBER + DATUMVÄLJARE
+ * Isolerad patch ovanpå v19.3.
+ * Datumväljare styr vilka prefabgjutningar som visas för avformning.
+ ***********************************************************/
+(function(){
+  if (window.__BTG_V193_DEMOULDING_PATCHED) return;
+  window.__BTG_V193_DEMOULDING_PATCHED = true;
+
+  let DEMOULDING_CUBES = [];
+  let DEMOULDING_TABLE_READY = true;
+  let DEMOULDING_LAST_ERROR = '';
+  let DEMOULDING_LAST_VIEW = [];
+
+  function esc(v){
+    if (typeof escapeHtml === 'function') return escapeHtml(v);
+    return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function uid(){ return (typeof uuid === 'function') ? uuid() : ('demould_' + Date.now() + '_' + Math.random().toString(16).slice(2)); }
+  function currentUser(){ return (typeof CURRENT_USER !== 'undefined') ? CURRENT_USER : null; }
+  function localISO(d){
+    const x = d ? new Date(d) : new Date();
+    x.setMinutes(x.getMinutes() - x.getTimezoneOffset());
+    return x.toISOString().slice(0,10);
+  }
+  function yesterdayISO(){ const d = new Date(); d.setDate(d.getDate() - 1); return localISO(d); }
+  function selectedDemouldingCastDate(){
+    const el = document.getElementById('demouldingCastDate');
+    const val = (el?.value || '').trim();
+    return val || yesterdayISO();
+  }
+  function ensureDemouldingCastDateDefault(){
+    const el = document.getElementById('demouldingCastDate');
+    if (el && !el.value) el.value = yesterdayISO();
+  }
+  function fmtDateTime(v){ try { return v ? new Date(v).toLocaleString('sv-SE', { dateStyle:'short', timeStyle:'short' }) : '—'; } catch { return v || '—'; } }
+  function fmtDateOnly(v){ try { return v ? new Date(v).toLocaleDateString('sv-SE') : '—'; } catch { return v || '—'; } }
+  function numOrNull(v){ const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : null; }
+  function textVal(id){ return (document.getElementById(id)?.value || '').trim(); }
+  function numberText(v, decimals){ const n = Number(v); return Number.isFinite(n) ? n.toFixed(decimals) : '—'; }
+
+  function batchCloudId(b){ return String(b?.cloudId || b?.id || ''); }
+  function batchHumanId(b){ return b?.batchId || b?.app_data?.batchId || b?.app_data?.batch_id || b?.app_data?.satsId || b?.id || ''; }
+  function productionType(b){
+    const raw = b?.productionType || b?.app_data?.productionType || b?.app_data?.production_type || (b?.source === 'customer_order' ? 'order' : (b?.source === 'prefab_queue' ? 'prefab' : ''));
+    return raw || '';
+  }
+  function isPrefabBatch(b){ return productionType(b) === 'prefab' || b?.source === 'prefab_queue'; }
+  function batchCastISO(b){ return localISO(b?.dateTime || b?.datetime || b?.createdAt || new Date()); }
+  function isCompleted(batch){
+    const id = batchCloudId(batch);
+    return !!id && DEMOULDING_CUBES.some(x => String(x.batchCloudId || '') === id);
+  }
+  function historyForBatch(batch){
+    const id = batchCloudId(batch);
+    return DEMOULDING_CUBES.find(x => String(x.batchCloudId || '') === id) || null;
+  }
+
+  function normalizeDemouldingRow(row){
+    const app = row?.app_data || {};
+    return {
+      ...app,
+      id: row.id || app.id || uid(),
+      cloudId: row.id || app.cloudId || null,
+      batchCloudId: row.batch_cloud_id || app.batchCloudId || '',
+      batchId: row.batch_id || app.batchId || '',
+      batchDateTime: row.batch_datetime || app.batchDateTime || '',
+      castDate: row.cast_date || app.castDate || '',
+      demouldDate: row.demould_date || app.demouldDate || localISO(),
+      recipeId: row.recipe_id || app.recipeId || '',
+      recipeName: row.recipe_name || app.recipeName || '',
+      strength: row.strength || app.strength || '',
+      productionType: row.production_type || app.productionType || 'prefab',
+      customerId: row.customer_id || app.customerId || '',
+      customerName: row.customer_name || app.customerName || '',
+      prefabRequestId: row.prefab_request_id || app.prefabRequestId || '',
+      factoryId: row.factory_id || app.factoryId || '',
+      amount: row.amount_m3 ?? app.amount ?? null,
+      mpa: row.mpa ?? app.mpa ?? null,
+      pressTime: row.press_time || app.pressTime || '',
+      employeeNo: row.employee_no || app.employeeNo || '',
+      comment: row.comment || app.comment || '',
+      createdAt: row.created_at || app.createdAt || new Date().toISOString(),
+      updatedAt: row.updated_at || app.updatedAt || row.created_at || new Date().toISOString()
+    };
+  }
+
+  async function loadDemouldingCubes(){
+    if (typeof sb === 'undefined' || !sb || !currentUser()) { DEMOULDING_CUBES = []; return; }
+    try{
+      const { data, error } = await sb
+        .from('demoulding_cubes')
+        .select('id,batch_cloud_id,batch_id,batch_datetime,cast_date,demould_date,recipe_id,recipe_name,strength,production_type,customer_id,customer_name,prefab_request_id,factory_id,amount_m3,mpa,press_time,employee_no,comment,app_data,created_at,updated_at')
+        .eq('user_id', currentUser().id)
+        .order('demould_date', { ascending:false })
+        .order('created_at', { ascending:false });
+      if (error) throw error;
+      DEMOULDING_TABLE_READY = true;
+      DEMOULDING_LAST_ERROR = '';
+      DEMOULDING_CUBES = (data || []).map(normalizeDemouldingRow);
+    }catch(err){
+      DEMOULDING_TABLE_READY = false;
+      DEMOULDING_LAST_ERROR = err?.message || String(err || 'Okänt fel');
+      console.warn('Kunde inte ladda avformningskuber. Har SQL-migrationen körts?', err);
+    }
+  }
+
+  async function saveDemouldingCube(record){
+    if (typeof getRequiredCloudUser !== 'function') { alert('Molnauth saknas. Ladda om appen.'); return null; }
+    const user = await getRequiredCloudUser('spara avformningskub i molnet');
+    if (!user) return null;
+    if (typeof sb === 'undefined' || !sb) { alert('Supabase är inte tillgängligt.'); return null; }
+
+    const appData = { ...record, cloudId: record.cloudId || null };
+    const payload = {
+      user_id: user.id,
+      batch_cloud_id: record.batchCloudId || null,
+      batch_id: record.batchId || '',
+      batch_datetime: record.batchDateTime || null,
+      cast_date: record.castDate || null,
+      demould_date: record.demouldDate || localISO(),
+      recipe_id: record.recipeId || null,
+      recipe_name: record.recipeName || '',
+      strength: record.strength || '',
+      production_type: record.productionType || 'prefab',
+      customer_id: record.customerId || null,
+      customer_name: record.customerName || '',
+      prefab_request_id: record.prefabRequestId || null,
+      factory_id: record.factoryId || null,
+      amount_m3: Number.isFinite(Number(record.amount)) ? Number(record.amount) : null,
+      mpa: Number(record.mpa),
+      press_time: record.pressTime || '',
+      employee_no: record.employeeNo || '',
+      comment: record.comment || '',
+      app_data: appData,
+      updated_at: new Date().toISOString()
+    };
+
+    try{
+      const { data, error } = await sb
+        .from('demoulding_cubes')
+        .upsert(payload, { onConflict: 'user_id,batch_cloud_id' })
+        .select('id,batch_cloud_id,batch_id,batch_datetime,cast_date,demould_date,recipe_id,recipe_name,strength,production_type,customer_id,customer_name,prefab_request_id,factory_id,amount_m3,mpa,press_time,employee_no,comment,app_data,created_at,updated_at')
+        .single();
+      if (error) throw error;
+      const saved = normalizeDemouldingRow(data);
+      DEMOULDING_TABLE_READY = true;
+      DEMOULDING_LAST_ERROR = '';
+      DEMOULDING_CUBES = [saved, ...DEMOULDING_CUBES.filter(x => String(x.cloudId || x.id) !== String(saved.cloudId || saved.id) && String(x.batchCloudId || '') !== String(saved.batchCloudId || ''))];
+      return saved;
+    }catch(err){
+      DEMOULDING_TABLE_READY = false;
+      DEMOULDING_LAST_ERROR = err?.message || String(err || 'Okänt fel');
+      if (typeof showSupabaseError === 'function') showSupabaseError('Fel vid sparning av avformningskub i Supabase', err);
+      else alert('Fel vid sparning av avformningskub: ' + DEMOULDING_LAST_ERROR);
+      return null;
+    }
+  }
+
+  function ensureDemouldingUI(){
+    if (document.getElementById('tab-avformningskuber')) return;
+
+    const nav = document.querySelector('header .main-nav') || document.querySelector('.main-nav') || document.querySelector('nav.toolbar');
+    if (nav && !nav.querySelector('[data-tab="avformningskuber"]')){
+      const btn = document.createElement('button');
+      btn.className = 'tab-btn';
+      btn.type = 'button';
+      btn.dataset.tab = 'avformningskuber';
+      btn.textContent = 'Avformningskuber';
+      btn.addEventListener('click', () => setTab('avformningskuber'));
+      const before = nav.querySelector('[data-tab="provningar"]') || nav.querySelector('[data-tab="utvardering"]') || nav.querySelector('[data-tab="dagbok"]');
+      if (before) nav.insertBefore(btn, before.nextSibling);
+      else nav.appendChild(btn);
+    }
+
+    const main = document.querySelector('main.container') || document.querySelector('main');
+    if (!main) return;
+    const section = document.createElement('section');
+    section.id = 'tab-avformningskuber';
+    section.className = 'grid';
+    section.style.display = 'none';
+    section.innerHTML = `
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;">
+          <div>
+            <h3>Avformningskuber</h3>
+            <div class="demoulding-status-line">
+              <span class="pill ok">v19.3.1</span>
+              <span class="pill" id="demouldingTargetDateLabel">Valt gjutdatum</span>
+              <span class="pill" id="demouldingCloudStatus">Väntar på molndata…</span>
+            </div>
+          </div>
+          <div class="toolbar" style="justify-content:flex-end;">
+            <button class="btn secondary" id="btnRefreshDemoulding" type="button">Uppdatera</button>
+            <button class="btn secondary" id="btnExportDemouldingPDF" type="button">Exportera PDF</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:end;gap:.75rem;flex-wrap:wrap;">
+          <div>
+            <h3>Att avforma</h3>
+            <p class="pill">Välj gjutdatum för prefab-satserna som ska avformas. Gårdagen är förvald. Fyll MPa, trycktid, anställningsnummer och eventuell kommentar, klicka sedan Klar.</p>
+          </div>
+          <div style="max-width:240px;min-width:190px;">
+            <label>Gjutdatum att visa</label>
+            <input type="date" id="demouldingCastDate">
+          </div>
+        </div>
+        <div style="overflow:auto; max-height:520px; margin-top:.6rem">
+          <table id="demouldingTodayTable">
+            <thead><tr>
+              <th>Gjutning</th><th>Sats-ID</th><th>Recept</th><th>Prefab/beställning</th><th>Kund</th><th>Mängd</th><th>Registrering</th><th>Status</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Historik</h3>
+        <div class="row demoulding-history-filters">
+          <div><label>Från</label><input type="date" id="demouldingHistoryFrom"></div>
+          <div><label>Till</label><input type="date" id="demouldingHistoryTo"></div>
+          <div><label>Filter</label><input id="demouldingHistorySearch" placeholder="sats, recept, kund, anställningsnummer"></div>
+          <div class="toolbar"><button class="btn secondary" id="btnApplyDemouldingHistory" type="button">Filtrera</button><button class="btn secondary" id="btnClearDemouldingHistory" type="button">Rensa</button></div>
+        </div>
+        <div id="demouldingHistorySummary" class="pill" style="margin-top:.6rem">Ingen historik laddad.</div>
+        <div style="overflow:auto; max-height:520px; margin-top:.6rem">
+          <table id="demouldingHistoryTable">
+            <thead><tr>
+              <th>Avformning</th><th>Gjutdatum</th><th>Sats-ID</th><th>Recept</th><th>Kund</th><th>MPa</th><th>Trycktid</th><th>Anst.nr</th><th>Kommentar</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>`;
+
+    const footer = main.querySelector('footer');
+    if (footer) main.insertBefore(section, footer);
+    else main.appendChild(section);
+    try { tabs.avformningskuber = section; } catch(e) { console.warn('Kunde inte registrera Avformningskuber-flik:', e); }
+
+    ensureDemouldingCastDateDefault();
+    document.getElementById('demouldingCastDate')?.addEventListener('change', () => {
+      renderDemouldingStatus();
+      renderDemouldingToday();
+    });
+    document.getElementById('btnRefreshDemoulding')?.addEventListener('click', refreshDemouldingModule);
+    document.getElementById('btnApplyDemouldingHistory')?.addEventListener('click', renderDemouldingHistory);
+    document.getElementById('btnClearDemouldingHistory')?.addEventListener('click', () => {
+      ['demouldingHistoryFrom','demouldingHistoryTo','demouldingHistorySearch'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      renderDemouldingHistory();
+    });
+    document.getElementById('btnExportDemouldingPDF')?.addEventListener('click', exportDemouldingPDF);
+  }
+
+  function prefabBatchesForSelectedDate(){
+    const target = selectedDemouldingCastDate();
+    return (Array.isArray(BATCHES) ? BATCHES : [])
+      .filter(b => isPrefabBatch(b) && batchCastISO(b) === target)
+      .sort((a,b) => String(a.dateTime || '').localeCompare(String(b.dateTime || '')));
+  }
+
+  function renderDemouldingStatus(){
+    const target = document.getElementById('demouldingTargetDateLabel');
+    ensureDemouldingCastDateDefault();
+    const selected = selectedDemouldingCastDate();
+    if (target) target.textContent = 'Gjutdatum: ' + fmtDateOnly(selected);
+    const status = document.getElementById('demouldingCloudStatus');
+    if (!status) return;
+    if (!currentUser()) status.textContent = 'Logga in för att se och spara molndata.';
+    else if (!DEMOULDING_TABLE_READY) status.textContent = 'SQL saknas eller kunde inte läsas: ' + DEMOULDING_LAST_ERROR;
+    else status.textContent = 'Historik laddad: ' + DEMOULDING_CUBES.length + ' avformningar';
+  }
+
+  function renderDemouldingToday(){
+    const tbody = document.querySelector('#demouldingTodayTable tbody');
+    if (!tbody) return;
+    if (!currentUser()){
+      tbody.innerHTML = '<tr><td colspan="8"><span class="pill warn">Logga in för att arbeta med avformningskuber.</span></td></tr>';
+      return;
+    }
+    if (!DEMOULDING_TABLE_READY){
+      tbody.innerHTML = `<tr><td colspan="8"><span class="pill danger">Kör SQL-migrationen för demoulding_cubes först. ${esc(DEMOULDING_LAST_ERROR)}</span></td></tr>`;
+      return;
+    }
+    const rows = prefabBatchesForSelectedDate();
+    if (!rows.length){
+      tbody.innerHTML = '<tr><td colspan="8">Inga prefabgjutningar hittades för valt gjutdatum i tillverkningsjournalen.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map((b, idx) => {
+      const done = historyForBatch(b);
+      const rowClass = done ? ' class="demoulding-done-row"' : '';
+      const inputId = 'demoulding-row-' + idx;
+      const typeTxt = productionType(b) === 'order' ? 'Beställning' : 'Prefab';
+      return `<tr${rowClass} data-batch-cloud-id="${esc(batchCloudId(b))}">
+        <td>${esc(fmtDateTime(b.dateTime))}<span class="demoulding-small">${esc(b.tableNo || b.app_data?.tableNo || b.app_data?.table_no || '')}</span></td>
+        <td>${esc(batchHumanId(b) || '—')}</td>
+        <td>${esc(b.recipeName || '—')}<span class="demoulding-small">${esc(b.strength || '')}</span></td>
+        <td>${esc(typeTxt)}</td>
+        <td>${esc(b.customerName || b.app_data?.customerName || b.app_data?.customer_name || '—')}</td>
+        <td>${numberText(b.amount, 2)} m³</td>
+        <td>
+          ${done ? `<span class="pill ok">Sparad ${esc(fmtDateOnly(done.demouldDate))}</span><span class="demoulding-small">${numberText(done.mpa,1)} MPa • ${esc(done.employeeNo)}</span>` : `
+          <div class="demoulding-input-row" id="${inputId}">
+            <div><label>MPa</label><input type="number" step="0.1" min="0" data-field="mpa"></div>
+            <div><label>Trycktid</label><input type="text" data-field="pressTime" placeholder="t.ex. 08:15"></div>
+            <div><label>Anst.nr</label><input type="text" data-field="employeeNo" placeholder="t.ex. 1234"></div>
+            <div><label>Kommentar</label><input type="text" data-field="comment" placeholder="valfritt"></div>
+            <button class="btn" type="button" data-demoulding-save="${idx}">Klar</button>
+          </div>`}
+        </td>
+        <td>${done ? '<span class="pill ok">Klar</span>' : '<span class="pill warn">Ej klar</span>'}</td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-demoulding-save]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const b = rows[Number(btn.getAttribute('data-demoulding-save'))];
+        await completeDemouldingBatch(b, btn.closest('tr'));
       });
     });
   }
 
-  function openPressDialog(recipe){
-    ensureDialog();
-    const dialog = document.getElementById('recipePressDialog');
-    if (!dialog || !recipe) return;
-    document.getElementById('recipePressTitle').textContent = 'Tidiga tryckresultat – ' + (recipe.name || 'recept');
-    document.getElementById('recipePressRecipeId').value = recipe.id || recipe.cloudId;
-    document.getElementById('recipePressDate').value = today();
-    document.getElementById('recipePressMPa').value = '';
-    document.getElementById('recipePressNote').value = '';
-    document.getElementById('recipePressAgePreset').value = '18h';
-    document.getElementById('recipePressAgeCustom').value = '';
-    renderPressList(recipe);
-    dialog.showModal();
-  }
+  async function completeDemouldingBatch(batch, rowEl){
+    const box = rowEl?.querySelector('.demoulding-input-row');
+    if (!batch || !box) return;
+    const mpa = numOrNull(box.querySelector('[data-field="mpa"]')?.value);
+    const pressTime = (box.querySelector('[data-field="pressTime"]')?.value || '').trim();
+    const employeeNo = (box.querySelector('[data-field="employeeNo"]')?.value || '').trim();
+    const comment = (box.querySelector('[data-field="comment"]')?.value || '').trim();
+    if (!Number.isFinite(mpa) || mpa <= 0){ alert('Fyll i MPa med ett värde större än 0.'); return; }
+    if (!pressTime){ alert('Fyll i trycktid.'); return; }
+    if (!employeeNo){ alert('Fyll i anställningsnummer.'); return; }
 
-  async function savePressResult(){
-    const id = document.getElementById('recipePressRecipeId')?.value;
-    const recipe = (RECIPES||[]).find(r => r.id === id || r.cloudId === id);
-    if (!recipe){ alert('Kunde inte hitta receptet.'); return; }
-    const mpa = Number(document.getElementById('recipePressMPa')?.value);
-    if (!Number.isFinite(mpa) || mpa <= 0){ alert('Ange MPa.'); return; }
-    const result = {
-      id: (typeof uuid === 'function') ? uuid() : String(Date.now()),
-      date: document.getElementById('recipePressDate')?.value || today(),
-      age: ageLabelValue(),
+    const record = {
+      id: uid(),
+      batchCloudId: batchCloudId(batch),
+      batchId: batchHumanId(batch),
+      batchDateTime: batch.dateTime || batch.datetime || '',
+      castDate: batchCastISO(batch),
+      demouldDate: localISO(),
+      recipeId: batch.recipeCloudId || batch.recipeId || null,
+      recipeName: batch.recipeName || '',
+      strength: batch.strength || '',
+      productionType: productionType(batch) || 'prefab',
+      customerId: batch.customerId || batch.app_data?.customerId || null,
+      customerName: batch.customerName || batch.app_data?.customerName || batch.app_data?.customer_name || '',
+      prefabRequestId: batch.prefabRequestId || batch.app_data?.prefabRequestId || batch.app_data?.prefab_request_id || null,
+      factoryId: batch.prefabFactoryId || batch.app_data?.prefabFactoryId || batch.app_data?.factory_id || null,
+      amount: batch.amount ?? null,
       mpa,
-      note: document.getElementById('recipePressNote')?.value || '',
-      createdAt: new Date().toISOString()
+      pressTime,
+      employeeNo,
+      comment,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
-    recipe.earlyPressResults = Array.isArray(recipe.earlyPressResults) ? recipe.earlyPressResults : [];
-    recipe.earlyPressResults.push(result);
-    const saved = await saveRecipeToSupabase(recipe);
+
+    const saved = await saveDemouldingCube(record);
     if (!saved) return;
-    RECIPES = RECIPES.map(r => (r.id === recipe.id || r.cloudId === recipe.cloudId) ? saved : r);
-    renderPressList(saved);
-    if (typeof renderRecipes === 'function') renderRecipes();
+    renderDemouldingStatus();
+    renderDemouldingToday();
+    renderDemouldingHistory();
   }
 
-  function pressSummary(recipe){
-    const rows = Array.isArray(recipe?.earlyPressResults) ? recipe.earlyPressResults : [];
-    if (!rows.length) return '<small class="muted">Inga tidiga MPa</small>';
-    return '<small class="muted">MPa: '+ rows.map(r => esc(r.age)+': '+fmtNum(r.mpa,1)).join(' • ') + '</small>';
+  function filteredHistory(){
+    const from = textVal('demouldingHistoryFrom');
+    const to = textVal('demouldingHistoryTo');
+    const q = textVal('demouldingHistorySearch').toLowerCase();
+    return (DEMOULDING_CUBES || []).filter(r => {
+      const d = r.demouldDate || '';
+      const hay = [r.batchId, r.recipeName, r.strength, r.customerName, r.employeeNo, r.comment].join(' ').toLowerCase();
+      return (!from || d >= from) && (!to || d <= to) && (!q || hay.includes(q));
+    }).sort((a,b) => String(b.demouldDate || '').localeCompare(String(a.demouldDate || '')) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   }
 
-  function recipePdf(recipe){
-    const mats = Array.isArray(recipe.materials) ? recipe.materials : [];
-    const gwp = (typeof gwpPerM3FromRecipe === 'function') ? gwpPerM3FromRecipe(recipe, MATERIALS||[]) : NaN;
-    const exposure = recipe.exposureAssessment || (typeof assessRecipeExposure === 'function' ? assessRecipeExposure({vctEq:recipe.vctEq, airReq:recipe.airReq, dmaxClass:recipe.dmaxClass||'gt16', binderCategory:recipe.binderCategory||'standard'}) : null);
-    const exposureTxt = exposure?.classes?.length ? exposure.classes.join(', ') : '—';
-    const warnings = exposure?.warnings?.length ? '<ul>'+exposure.warnings.map(w=>'<li>'+esc(w)+'</li>').join('')+'</ul>' : '—';
-    const matRows = mats.map(m => '<tr><td>'+esc(m.type||'')+'</td><td>'+esc(m.name||'')+'</td><td class="right">'+fmtNum(m.amount,2)+'</td><td class="right">'+(m.k??'')+'</td><td>'+esc(m.note||'')+'</td></tr>').join('') || '<tr><td colspan="5">Inga material.</td></tr>';
-    const pressRows = (recipe.earlyPressResults||[]).map(r => '<tr><td>'+esc(r.date||'')+'</td><td>'+esc(r.age||'')+'</td><td class="right">'+fmtNum(r.mpa,1)+'</td><td>'+esc(r.note||'')+'</td></tr>').join('') || '<tr><td colspan="4">Inga MPa-resultat registrerade.</td></tr>';
-    const html = '<h1>Receptblad</h1>'+
-      '<div class="meta">Recept: <b>'+esc(recipe.name||'')+'</b> • Hållfasthet: '+esc(recipe.strength||'')+' • Källa: BTG Quality Control</div>'+
-      '<h2>Sammanfattning</h2><table><tbody>'+
-      '<tr><th>VCT</th><td>'+fmtNum(recipe.vct,3)+'</td><th>VCTekv</th><td>'+fmtNum(recipe.vctEq,3)+'</td></tr>'+
-      '<tr><th>Luftkrav</th><td>'+fmtNum(recipe.airReq,1)+' %</td><th>GWP</th><td>'+fmtNum(gwp,1)+' kgCO₂e/m³</td></tr>'+
-      '<tr><th>Exponeringsklasser</th><td colspan="3">'+esc(exposureTxt)+'</td></tr>'+
-      '<tr><th>Kommentar/varning</th><td colspan="3">'+warnings+'</td></tr>'+
-      '</tbody></table>'+
-      '<h2>Material</h2><table><thead><tr><th>Typ</th><th>Namn</th><th class="right">Mängd</th><th class="right">k</th><th>Notering</th></tr></thead><tbody>'+matRows+'</tbody></table>'+
-      '<h2>Tidiga tryckresultat</h2><table><thead><tr><th>Datum</th><th>Ålder</th><th class="right">MPa</th><th>Notering</th></tr></thead><tbody>'+pressRows+'</tbody></table>';
-    if (typeof openPrintWindow === 'function') openPrintWindow('Receptblad – ' + (recipe.name||''), html);
-    else {
-      const w = window.open('', '_blank');
-      w.document.write('<html><body>'+html+'</body></html>');
-      w.document.close();
-      w.print();
+  function renderDemouldingHistory(){
+    const tbody = document.querySelector('#demouldingHistoryTable tbody');
+    const summary = document.getElementById('demouldingHistorySummary');
+    if (!tbody) return;
+    if (!currentUser()){
+      tbody.innerHTML = '<tr><td colspan="9">Logga in för att se historik.</td></tr>';
+      if (summary) summary.textContent = 'Ingen användare inloggad.';
+      DEMOULDING_LAST_VIEW = [];
+      return;
+    }
+    if (!DEMOULDING_TABLE_READY){
+      tbody.innerHTML = `<tr><td colspan="9"><span class="pill danger">SQL saknas eller kunde inte läsas: ${esc(DEMOULDING_LAST_ERROR)}</span></td></tr>`;
+      if (summary) summary.textContent = 'Historik kunde inte laddas.';
+      DEMOULDING_LAST_VIEW = [];
+      return;
+    }
+    const rows = filteredHistory();
+    DEMOULDING_LAST_VIEW = rows;
+    if (summary){
+      const avg = rows.length ? rows.reduce((sum,r)=>sum + (Number(r.mpa)||0), 0) / rows.length : 0;
+      summary.textContent = rows.length ? `${rows.length} avformningar • snitt ${avg.toFixed(1)} MPa` : 'Ingen historik matchar filtret.';
+    }
+    tbody.innerHTML = rows.length ? rows.map(r => `<tr>
+      <td>${esc(fmtDateOnly(r.demouldDate))}<span class="demoulding-small">${esc(fmtDateTime(r.createdAt))}</span></td>
+      <td>${esc(fmtDateOnly(r.castDate))}</td>
+      <td>${esc(r.batchId || '—')}</td>
+      <td>${esc(r.recipeName || '—')}<span class="demoulding-small">${esc(r.strength || '')}</span></td>
+      <td>${esc(r.customerName || '—')}</td>
+      <td>${numberText(r.mpa, 1)}</td>
+      <td>${esc(r.pressTime || '—')}</td>
+      <td>${esc(r.employeeNo || '—')}</td>
+      <td>${esc(r.comment || '')}</td>
+    </tr>`).join('') : '<tr><td colspan="9">Ingen historik.</td></tr>';
+  }
+
+  async function refreshDemouldingModule(){
+    if (currentUser() && typeof loadCloudCoreData === 'function') {
+      try { await loadCloudCoreData(); } catch(e){ console.warn('Kunde inte uppdatera molndata för Avformningskuber:', e); }
+    } else {
+      await loadDemouldingCubes();
+    }
+    renderDemouldingStatus();
+    renderDemouldingToday();
+    renderDemouldingHistory();
+  }
+
+  async function exportDemouldingPDF(){
+    if (currentUser() && typeof loadDemouldingCubes === 'function') await loadDemouldingCubes();
+    const rows = DEMOULDING_LAST_VIEW.length ? DEMOULDING_LAST_VIEW : filteredHistory();
+    const meta = (typeof reportMetaHTML === 'function') ? reportMetaHTML() : `<div class="meta">Skapad: ${esc(new Date().toLocaleString('sv-SE'))}</div>`;
+    const bodyRows = rows.map(r => `<tr>
+      <td>${esc(fmtDateOnly(r.demouldDate))}</td><td>${esc(fmtDateOnly(r.castDate))}</td><td>${esc(r.batchId || '—')}</td>
+      <td>${esc(r.recipeName || '—')}</td><td>${esc(r.strength || '')}</td><td>${esc(r.customerName || '—')}</td>
+      <td class="right">${numberText(r.amount,2)}</td><td class="right">${numberText(r.mpa,1)}</td><td>${esc(r.pressTime || '—')}</td><td>${esc(r.employeeNo || '—')}</td><td>${esc(r.comment || '')}</td>
+    </tr>`).join('') || '<tr><td colspan="11">Ingen historik.</td></tr>';
+    const html = `<h1>Avformningskuber</h1>${meta}
+      <p><b>Filter:</b> ${esc(textVal('demouldingHistoryFrom') || '—')} till ${esc(textVal('demouldingHistoryTo') || '—')} • ${esc(textVal('demouldingHistorySearch') || 'Alla')}</p>
+      <table><thead><tr><th>Avformning</th><th>Gjutdatum</th><th>Sats-ID</th><th>Recept</th><th>Hållfasthet</th><th>Kund</th><th>m³</th><th>MPa</th><th>Trycktid</th><th>Anst.nr</th><th>Kommentar</th></tr></thead><tbody>${bodyRows}</tbody></table>`;
+    if (typeof openPrintWindow === 'function') openPrintWindow('Avformningskuber', html);
+    else { const w = window.open('', '_blank'); w.document.write(html); w.document.close(); w.print(); }
+  }
+
+  function patchCore(){
+    try{
+      const oldLoad = loadCloudCoreData;
+      loadCloudCoreData = async function(){
+        const res = await oldLoad.apply(this, arguments);
+        await loadDemouldingCubes();
+        return res;
+      };
+    }catch(e){ console.warn('Kunde inte koppla Avformningskuber till molnladdning:', e); }
+
+    try{
+      const oldSetTab = setTab;
+      setTab = async function(name){
+        if (name === 'avformningskuber'){
+          ensureDemouldingUI();
+          for (const [k, el] of Object.entries(tabs)) if (el) el.style.display = (k === name ? 'grid' : 'none');
+          document.querySelectorAll('.tab-btn').forEach(btn => btn.setAttribute('aria-current', btn.dataset.tab === name ? 'page' : 'false'));
+          await refreshDemouldingModule();
+          if (document.body.classList.contains('sidebar-open')) document.body.classList.remove('sidebar-open');
+          return;
+        }
+        const res = await oldSetTab.apply(this, arguments);
+        const section = document.getElementById('tab-avformningskuber');
+        if (section) section.style.display = 'none';
+        return res;
+      };
+    }catch(e){ console.warn('Kunde inte koppla Avformningskuber till fliksystem:', e); }
+
+    try{
+      const oldLogout = authLogout;
+      authLogout = async function(){
+        const res = await oldLogout.apply(this, arguments);
+        DEMOULDING_CUBES = [];
+        renderDemouldingStatus(); renderDemouldingToday(); renderDemouldingHistory();
+        return res;
+      };
+    }catch(e){ /* äldre versioner utan authLogout */ }
+
+    try{
+      const oldBuildFullBackup = buildFullBackup;
+      buildFullBackup = function(){
+        const backup = oldBuildFullBackup.apply(this, arguments);
+        backup.version = Math.max(Number(backup.version || 0), 3);
+        backup.data = backup.data || {};
+        backup.data.demouldingCubes = DEMOULDING_CUBES.slice();
+        return backup;
+      };
+    }catch(e){ /* äldre versioner utan buildFullBackup */ }
+  }
+
+  function init(){
+    ensureDemouldingUI();
+    patchCore();
+    loadDemouldingCubes().then(() => { renderDemouldingStatus(); renderDemouldingHistory(); }).catch(()=>{});
+  }
+
+  window.BTG_DEMOULDING_CUBES = () => DEMOULDING_CUBES.slice();
+  window.loadDemouldingCubes = loadDemouldingCubes;
+  window.renderDemouldingHistory = renderDemouldingHistory;
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+
+<!-- =========================================================
+     v19.4 BEHÖRIGHETSKODER & FABRIKSROLLER – isolerad patch
+     - Kod aktiveras första gången efter inloggning
+     - Profil sparas i Supabase-tabellen btg_user_access_profiles
+     - Menyer och skyddad fliknavigering styrs av permissions
+     - Låter äldre prefab/factory_members-flöde leva kvar för prefabkö
+========================================================= -->
+<style id="btg-v19-4-access-style">
+  #btgAccessDialog .access-code-input { text-transform: uppercase; letter-spacing:.08em; font-weight:800; }
+  #btgAccessDialog .access-role-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:.45rem; margin-top:.55rem; }
+  #btgAccessDialog .access-role-grid .pill { display:block; white-space:normal; line-height:1.3; }
+  #btgAccessBadge { white-space: nowrap; }
+  body.btg-access-locked main > section { display:none !important; }
+  body.btg-access-locked #btnSettings,
+  body.btg-access-locked #btnNordcert,
+  body.btg-access-locked #btnExportAll,
+  body.btg-access-locked #btnImportAll { display:none !important; }
+  body.btg-access-locked .main-nav .tab-btn[data-tab] { display:none !important; }
+  @media (max-width:700px){ #btgAccessDialog .access-role-grid { grid-template-columns: 1fr; } }
+</style>
+
+<dialog id="btgAccessDialog">
+  <form method="dialog" class="container" id="btgAccessForm" novalidate>
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <h3>Aktivera behörighet</h3>
+      <button type="button" class="btn secondary" id="btnBtgAccessLogout">Logga ut</button>
+    </div>
+    <p class="pill warn" id="btgAccessIntro">Ditt konto saknar ännu fabriksroll. Ange behörighetskoden du fått av administratören.</p>
+    <div class="grid grid-2">
+      <div>
+        <label>Behörighetskod</label>
+        <input id="btgAccessCodeInput" class="access-code-input" autocomplete="one-time-code" placeholder="t.ex. KONTOR-AB12">
+      </div>
+      <div style="align-self:end" class="toolbar">
+        <button type="button" class="btn" id="btnRedeemBtgAccessCode">Aktivera åtkomst</button>
+      </div>
+    </div>
+    <div id="btgAccessMessage" class="pill" style="margin-top:.7rem">Koden kopplar dig till rätt fabrik, roll och moduler.</div>
+    <div class="access-role-grid">
+      <span class="pill"><b>KONTOR</b><br>Tillverkningsjournaler, beställningar, recept/material och rapporter.</span>
+      <span class="pill"><b>PRODUKTION</b><br>Endast Prefabkö och Avformningskuber.</span>
+      <span class="pill"><b>LABB</b><br>Provkuber, luftprov, avformningskuber och utvärdering.</span>
+      <span class="pill"><b>KVALITET</b><br>Kontroll, utvärdering, Nordcert, journaler och rapporter.</span>
+    </div>
+  </form>
+</dialog>
+
+
+<script id="btg-v19-5-6-supabase-global-bridge">
+/* v19.5.6 – gör befintlig Supabase-klient tillgänglig för sena patchar utan att duplicera klienten. */
+(function(){
+  if (window.__BTG_V1956_SUPABASE_BRIDGE) return;
+  window.__BTG_V1956_SUPABASE_BRIDGE = true;
+  try {
+    if (!Object.getOwnPropertyDescriptor(window, 'sb')) {
+      Object.defineProperty(window, 'sb', { configurable:true, get:function(){ try { return sb; } catch(_) { return null; } } });
+    }
+  } catch(_) {}
+  try {
+    if (!Object.getOwnPropertyDescriptor(window, 'SUPABASE_READY')) {
+      Object.defineProperty(window, 'SUPABASE_READY', { configurable:true, get:function(){ try { return !!SUPABASE_READY; } catch(_) { return false; } } });
+    }
+  } catch(_) {}
+  window.btgGetSupabaseClient = function(){ try { return sb || window.sb || null; } catch(_) { return window.sb || null; } };
+  window.btgIsSupabaseReady = function(){ try { return !!SUPABASE_READY && !!sb; } catch(_) { return !!window.sb; } };
+})();
+</script>
+<script id="btg-v19-4-access-script">
+/***********************************************************
+ * v19.4 – BEHÖRIGHETSKODER & FABRIKSROLLER
+ * Isolerad patch ovanpå v19.3.1.
+ ***********************************************************/
+(function(){
+  if (window.__BTG_V194_ACCESS_PATCHED) return;
+  window.__BTG_V194_ACCESS_PATCHED = true;
+
+  const ACCESS_TABLE = 'btg_user_access_profiles';
+  const ACCESS_RPC = 'redeem_btg_access_code';
+
+  const ROLE_PRESETS = {
+    ADMIN: {
+      dashboard:true, tillverkning:true, bestallningar:true, provningar:true, utvardering:true, kontroll:true, material:true, dagbok:true,
+      prefab:true, avformningskuber:true, avvikelser:true, settings:true, nordcert:true, exports:true, imports:true
+    },
+    KONTOR: {
+      dashboard:true, tillverkning:true, bestallningar:true, material:true, utvardering:true, provningar:true, nordcert:true, exports:true
+    },
+    PRODUKTION: {
+      prefab:true, avformningskuber:true
+    },
+    LABB: {
+      dashboard:true, provningar:true, avformningskuber:true, utvardering:true, material:true, exports:true
+    },
+    KVALITET: {
+      dashboard:true, tillverkning:true, bestallningar:true, provningar:true, utvardering:true, kontroll:true, material:true, dagbok:true,
+      prefab:true, avformningskuber:true, avvikelser:true, nordcert:true, exports:true
+    },
+    PREFAB: {
+      prefab:true
+    },
+    LASARE: {
+      dashboard:true, tillverkning:true, bestallningar:true, provningar:true, utvardering:true, material:true, exports:true
+    },
+    'LÄSARE': {
+      dashboard:true, tillverkning:true, bestallningar:true, provningar:true, utvardering:true, material:true, exports:true
+    }
+  };
+
+  const TAB_LABELS = {
+    dashboard:'Dashboard', tillverkning:'Tillverkningsdata', bestallningar:'Beställningar', provningar:'Provningar', utvardering:'Utvärdering',
+    kontroll:'Kontroll', material:'Material', dagbok:'Dagbok', prefab:'Prefabkö', avformningskuber:'Avformningskuber', avvikelser:'Avvikelser'
+  };
+
+  window.BTG_ACCESS_STATE = window.BTG_ACCESS_STATE || { loaded:false, profile:null, factory:null, permissions:null, error:null };
+
+  function currentUser(){ try { return (typeof CURRENT_USER !== 'undefined') ? CURRENT_USER : null; } catch(_) { return null; } }
+  function esc(v){
+    if (typeof escapeHtml === 'function') return escapeHtml(v);
+    return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function normalizeRole(role){ return String(role || '').trim().toUpperCase() || ''; }
+  function permissionsFor(profile){
+    const role = normalizeRole(profile?.role_code || profile?.role);
+    return { ...(ROLE_PRESETS[role] || {}), ...(profile?.permissions || {}) };
+  }
+  function firstAllowedTab(perms){
+    const preferred = ['dashboard','prefab','tillverkning','bestallningar','provningar','avformningskuber','utvardering','kontroll','material','dagbok','avvikelser'];
+    return preferred.find(t => !!perms?.[t]) || 'dashboard';
+  }
+  function isTabAllowed(tab){
+    const st = window.BTG_ACCESS_STATE || {};
+    if (!currentUser()) return true;
+    if (!st.loaded) return true;
+    if (!st.profile) return false;
+    return !!st.permissions?.[tab];
+  }
+  function roleLabel(role){
+    const r = normalizeRole(role);
+    if (r === 'LASARE') return 'LÄSARE';
+    return r || '—';
+  }
+
+  function ensureAccessBadge(){
+    if (document.getElementById('btgAccessBadge')) return;
+    const target = document.querySelector('.header-actions') || document.querySelector('header .container') || document.querySelector('header');
+    if (!target) return;
+    const badge = document.createElement('span');
+    badge.id = 'btgAccessBadge';
+    badge.className = 'pill';
+    badge.textContent = 'Behörighet: —';
+    const authStatus = document.getElementById('authStatus');
+    if (authStatus && authStatus.parentNode === target) target.insertBefore(badge, authStatus.nextSibling);
+    else target.appendChild(badge);
+  }
+
+  async function fetchFactory(factoryId){
+    if (!factoryId || !window.sb) return null;
+    try{
+      const { data, error } = await sb.from('factories').select('id,name,join_code,created_at').eq('id', factoryId).single();
+      if (error) throw error;
+      return data || null;
+    }catch(err){
+      console.warn('Kunde inte läsa fabrik för behörighetsprofil:', err);
+      return null;
     }
   }
 
-  function addRecipeButtons(){
-    const tbody = document.querySelector('#recipesTable tbody');
-    if (!tbody || !Array.isArray(RECIPES)) return;
-    Array.from(tbody.querySelectorAll('tr')).forEach((tr, idx) => {
-      if (tr.__btgRecipeButtons) return;
-      const recipe = RECIPES[idx];
-      if (!recipe) return;
-      const toolbar = tr.querySelector('.toolbar');
-      if (!toolbar) return;
-      const mpaBtn = document.createElement('button');
-      mpaBtn.type = 'button';
-      mpaBtn.className = 'btn secondary';
-      mpaBtn.textContent = 'MPa';
-      mpaBtn.addEventListener('click', () => openPressDialog(recipe));
-      const pdfBtn = document.createElement('button');
-      pdfBtn.type = 'button';
-      pdfBtn.className = 'btn secondary';
-      pdfBtn.textContent = 'PDF';
-      pdfBtn.addEventListener('click', () => recipePdf(recipe));
-      toolbar.insertBefore(mpaBtn, toolbar.firstChild);
-      toolbar.insertBefore(pdfBtn, toolbar.firstChild);
-      const cells = tr.querySelectorAll('td');
-      if (cells.length >= 8){
-        const summary = document.createElement('div');
-        summary.innerHTML = pressSummary(recipe);
-        cells[0].appendChild(summary);
+  async function loadAccessState(){
+    ensureAccessBadge();
+    const user = currentUser();
+    window.BTG_ACCESS_STATE = { loaded:false, profile:null, factory:null, permissions:null, error:null };
+
+    if (!user || !window.SUPABASE_READY || !window.sb){
+      applyAccessState();
+      return window.BTG_ACCESS_STATE;
+    }
+
+    try{
+      const { data, error } = await sb
+        .from(ACCESS_TABLE)
+        .select('id,user_id,factory_id,role_code,permissions,activated_at,updated_at')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (error) throw error;
+      const profile = data || null;
+      const factory = profile?.factory_id ? await fetchFactory(profile.factory_id) : null;
+      window.BTG_ACCESS_STATE = {
+        loaded:true,
+        profile,
+        factory,
+        permissions: permissionsFor(profile),
+        error:null
+      };
+
+      // Håll äldre prefab/rollpatch lugn: den tittar på BTG_ROLE_STATE.
+      window.BTG_ROLE_STATE = {
+        loaded:true,
+        role: profile ? normalizeRole(profile.role_code) : null,
+        factory,
+        member: profile ? { factory_id: profile.factory_id, role: normalizeRole(profile.role_code) } : null
+      };
+    }catch(err){
+      console.warn('Kunde inte läsa v19.4-behörighet:', err);
+      window.BTG_ACCESS_STATE = { loaded:true, profile:null, factory:null, permissions:null, error:err };
+    }
+
+    applyAccessState();
+    return window.BTG_ACCESS_STATE;
+  }
+
+  function setMessage(text, kind){
+    const el = document.getElementById('btgAccessMessage');
+    if (!el) return;
+    el.className = 'pill ' + (kind || '');
+    el.textContent = text;
+  }
+
+  async function redeemAccessCode(){
+    const input = document.getElementById('btgAccessCodeInput');
+    const code = (input?.value || '').trim().toUpperCase();
+    if (!code){ setMessage('Ange behörighetskod.', 'warn'); input?.focus(); return; }
+    if (!currentUser()){ setMessage('Du måste vara inloggad först.', 'warn'); return; }
+    if (!window.sb){ setMessage('Supabase är inte tillgängligt. Ladda om appen.', 'danger'); return; }
+
+    const btn = document.getElementById('btnRedeemBtgAccessCode');
+    const old = btn?.textContent;
+    if (btn){ btn.disabled = true; btn.textContent = 'Aktiverar…'; }
+    setMessage('Kontrollerar kod…', '');
+
+    try{
+      const { data, error } = await sb.rpc(ACCESS_RPC, { p_code: code });
+      if (error) throw error;
+      setMessage('Åtkomst aktiverad. Laddar om behörighet…', 'ok');
+      if (input) input.value = '';
+      await loadAccessState();
+      try { await loadCloudCoreData?.(); } catch(e){ console.warn('Kunde inte ladda om molndata efter kodaktivering:', e); }
+      closeAccessDialog();
+      const first = firstAllowedTab(window.BTG_ACCESS_STATE.permissions || {});
+      setTimeout(()=>{ try { setTab(first); } catch(e){} }, 50);
+      const role = roleLabel(window.BTG_ACCESS_STATE.profile?.role_code);
+      const factory = window.BTG_ACCESS_STATE.factory?.name ? ' – ' + window.BTG_ACCESS_STATE.factory.name : '';
+      alert('Åtkomst aktiverad: ' + role + factory);
+    }catch(err){
+      const msg = err?.message || String(err || 'Okänt fel');
+      setMessage(msg, 'danger');
+    }finally{
+      if (btn){ btn.disabled = false; btn.textContent = old || 'Aktivera åtkomst'; }
+    }
+  }
+
+  function openAccessDialog(){
+    const dlg = document.getElementById('btgAccessDialog');
+    if (!dlg) return;
+    setMessage('Koden kopplar dig till rätt fabrik, roll och moduler.', '');
+    try { if (!dlg.open) dlg.showModal(); } catch(e){ dlg.setAttribute('open','open'); }
+    setTimeout(()=>document.getElementById('btgAccessCodeInput')?.focus(), 80);
+  }
+  function closeAccessDialog(){
+    const dlg = document.getElementById('btgAccessDialog');
+    if (!dlg) return;
+    try { if (dlg.open) dlg.close(); } catch(e){ dlg.removeAttribute('open'); }
+  }
+
+  function applyAccessState(){
+    ensureAccessBadge();
+    const user = currentUser();
+    const st = window.BTG_ACCESS_STATE || {};
+    const locked = !!user && st.loaded && !st.profile;
+    const perms = st.permissions || {};
+    const badge = document.getElementById('btgAccessBadge');
+
+    document.body.classList.toggle('btg-access-locked', locked);
+    // Den äldre v18.6-CSS:en låser requester till prefab. v19.4 styr istället själv.
+    document.body.classList.remove('role-requester');
+
+    if (badge){
+      if (!user) badge.textContent = 'Behörighet: ej inloggad';
+      else if (!st.loaded) badge.textContent = 'Behörighet: laddar…';
+      else if (st.error) badge.textContent = 'Behörighet: SQL/åtkomstfel';
+      else if (!st.profile) badge.textContent = 'Behörighetskod krävs';
+      else {
+        const factoryTxt = st.factory?.name ? ' • ' + st.factory.name : '';
+        badge.textContent = 'Roll: ' + roleLabel(st.profile.role_code) + factoryTxt;
       }
-      tr.__btgRecipeButtons = true;
+    }
+
+    document.querySelectorAll('.main-nav [data-tab], nav.toolbar [data-tab]').forEach(btn => {
+      const tab = btn.dataset.tab;
+      if (!user || !st.loaded || !st.profile) btn.style.display = locked ? 'none' : '';
+      else btn.style.display = perms[tab] ? '' : 'none';
+    });
+
+    const settingsAllowed = !!perms.settings;
+    const exportsAllowed = !!perms.exports;
+    const importsAllowed = !!perms.imports || !!perms.exports;
+    const nordcertAllowed = !!perms.nordcert;
+    const setDisplay = (id, show) => { const el = document.getElementById(id); if (el) el.style.display = show ? '' : 'none'; };
+    if (user && st.loaded && st.profile){
+      setDisplay('btnSettings', settingsAllowed);
+      setDisplay('btnNordcert', nordcertAllowed);
+      setDisplay('btnExportAll', exportsAllowed);
+      setDisplay('btnImportAll', importsAllowed);
+    } else if (!user){
+      ['btnSettings','btnNordcert','btnExportAll','btnImportAll'].forEach(id => setDisplay(id, true));
+    }
+
+    if (locked){
+      openAccessDialog();
+      return;
+    }
+
+    if (user && st.loaded && st.profile){
+      closeAccessDialog();
+      const current = document.querySelector('.tab-btn[aria-current="page"]')?.dataset?.tab;
+      if (current && !perms[current]){
+        const first = firstAllowedTab(perms);
+        setTimeout(()=>{ try { setTab(first); } catch(e){} }, 0);
+      }
+    }
+  }
+
+  function directShowTab(name){
+    try{
+      if (name === 'prefab' && typeof window.loadPrefabModule === 'function'){
+        for (const [k, el] of Object.entries(tabs || {})) if (el) el.style.display = (k === name ? 'grid':'none');
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.setAttribute('aria-current', btn.dataset.tab === name ? 'page':'false'));
+        window.loadPrefabModule();
+        return true;
+      }
+      if (name === 'avformningskuber' && document.getElementById('tab-avformningskuber')){
+        for (const [k, el] of Object.entries(tabs || {})) if (el) el.style.display = (k === name ? 'grid':'none');
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.setAttribute('aria-current', btn.dataset.tab === name ? 'page':'false'));
+        try { window.loadDemouldingCubes?.().then(()=>window.renderDemouldingHistory?.()); } catch(e){}
+        return true;
+      }
+    }catch(e){ console.warn('Direkt flikvisning misslyckades:', e); }
+    return false;
+  }
+
+  function patchAccessIntoCore(){
+    if (window.__BTG_V194_ACCESS_CORE_PATCHED) return;
+    window.__BTG_V194_ACCESS_CORE_PATCHED = true;
+
+    try{
+      const oldLoad = window.loadCloudCoreData || loadCloudCoreData;
+      window.loadCloudCoreData = loadCloudCoreData = async function(){
+        const res = await oldLoad.apply(this, arguments);
+        await loadAccessState();
+        return res;
+      };
+    }catch(e){ console.warn('Kunde inte koppla v19.4 behörighet till molnladdning:', e); }
+
+    try{
+      const oldSetTab = window.setTab || setTab;
+      window.setTab = setTab = async function(name){
+        await loadAccessStateIfNeeded();
+        if (!isTabAllowed(name)){
+          const st = window.BTG_ACCESS_STATE || {};
+          if (currentUser() && st.loaded && !st.profile){ openAccessDialog(); return; }
+          const first = firstAllowedTab(st.permissions || {});
+          if (name && TAB_LABELS[name]) alert('Din roll har inte åtkomst till ' + TAB_LABELS[name] + '.');
+          name = first;
+        }
+        let res;
+        if (directShowTab(name)) res = undefined;
+        else res = await oldSetTab.apply(this, [name]);
+        applyAccessState();
+        if (document.body.classList.contains('sidebar-open')) document.body.classList.remove('sidebar-open');
+        return res;
+      };
+    }catch(e){ console.warn('Kunde inte koppla v19.4 behörighet till fliksystem:', e); }
+
+    try{
+      if (window.sb?.auth?.onAuthStateChange){
+        sb.auth.onAuthStateChange(()=> setTimeout(()=>{ loadAccessState(); }, 350));
+      }
+    }catch(e){}
+  }
+
+  async function loadAccessStateIfNeeded(){
+    const st = window.BTG_ACCESS_STATE || {};
+    if (!currentUser()) return st;
+    if (!st.loaded) return await loadAccessState();
+    return st;
+  }
+
+  function initAccessUI(){
+    ensureAccessBadge();
+    document.getElementById('btnRedeemBtgAccessCode')?.addEventListener('click', redeemAccessCode);
+    document.getElementById('btgAccessCodeInput')?.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); redeemAccessCode(); } });
+    document.getElementById('btnBtgAccessLogout')?.addEventListener('click', async () => {
+      try { await authLogout?.(); } catch(e){}
+      closeAccessDialog();
     });
   }
 
-  function installRenderPatch(){
-    if (typeof renderRecipes !== 'function' || renderRecipes.__btgPressPatched) return;
-    const originalRenderRecipes = renderRecipes;
-    renderRecipes = function(){
-      const out = originalRenderRecipes.apply(this, arguments);
-      setTimeout(addRecipeButtons, 0);
-      return out;
-    };
-    renderRecipes.__btgPressPatched = true;
+  function init(){
+    initAccessUI();
+    patchAccessIntoCore();
+    loadAccessState();
+    setTimeout(applyAccessState, 500);
+    setTimeout(applyAccessState, 1500);
+    setTimeout(applyAccessState, 3000);
+  }
 
-    if (typeof saveRecipeToSupabase === 'function' && !saveRecipeToSupabase.__btgPressMergePatched){
-      const originalSave = saveRecipeToSupabase;
-      saveRecipeToSupabase = async function(recipe){
-        try{
-          const existing = (RECIPES||[]).find(r => r.id === recipe.id || r.cloudId === recipe.cloudId);
-          if (existing && Array.isArray(existing.earlyPressResults) && !Array.isArray(recipe.earlyPressResults)){
-            recipe.earlyPressResults = existing.earlyPressResults;
-          }
-        }catch(e){}
-        return originalSave.apply(this, arguments);
+  window.loadAccessState = loadAccessState;
+  window.applyAccessState = applyAccessState;
+  window.BTG_ROLE_PRESETS = ROLE_PRESETS;
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+
+<!-- =========================================================
+     v19.5 FABRIKER, FABRIKSADMIN, ROLLKODER & SUPERADMIN
+     Isolerad patch ovanpå v19.4.
+========================================================= -->
+<style id="btg-v19-5-factory-admin-style">
+  #btgFactorySetupCard { grid-column: 1 / -1; border-color: rgba(56,189,248,.45); }
+  #btgFactorySetupCard .factory-actions { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.65rem; }
+  #btgFactorySelectorWrap { display:none; grid-column: 1 / -1; gap:.25rem; }
+  #btgFactorySelectorWrap label { margin-bottom:0; font-size:.75rem; }
+  #btgFactorySelector { min-width: 190px; padding:.42rem .55rem; }
+  #btgFactoryAdminDialog table { font-size:.9rem; }
+  #btgFactoryAdminDialog .generated-code { font-size:1.05rem; letter-spacing:.08em; font-weight:900; }
+  #btgFactoryAdminDialog .admin-code-box, #btgCreateFactoryDialog .admin-code-box {
+    border:1px dashed var(--accent-2); border-radius:12px; padding:.7rem; background:rgba(56,189,248,.08); margin-top:.65rem;
+  }
+  body.btg-access-locked main > section#tab-dashboard { display:grid !important; }
+  body.btg-access-locked #btgFactorySetupCard { display:block !important; }
+  body.btg-access-locked #tab-dashboard > *:not(#btgFactorySetupCard) { display:none !important; }
+  body.btg-v195-superadmin.btg-access-locked main > section#tab-dashboard { display:grid !important; }
+  @media (max-width: 900px){ #btgFactorySelectorWrap { grid-column: 1 / -1; } }
+</style>
+
+<dialog id="btgCreateFactoryDialog">
+  <form method="dialog" class="container" id="btgCreateFactoryForm" novalidate>
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <h3>Skapa ny fabrik</h3>
+      <button type="button" class="btn secondary" id="btnCloseCreateFactory">Stäng</button>
+    </div>
+    <p class="pill">Skapa fabriken först. Därefter får du en unik fabriksadminkod som du anger under “Ange behörighetskod”.</p>
+    <div class="grid grid-2">
+      <div><label>Fabriksnamn *</label><input id="newFactoryName" placeholder="t.ex. Prefabfabriken A"></div>
+      <div><label>Fabrikskod / kortnamn</label><input id="newFactoryCode" placeholder="t.ex. FABRIK-A"></div>
+      <div><label>Organisationsnummer</label><input id="newFactoryOrg" placeholder="valfritt"></div>
+      <div><label>Kontaktperson</label><input id="newFactoryContactName" placeholder="valfritt"></div>
+      <div><label>Kontakt e-post</label><input id="newFactoryContactEmail" type="email" placeholder="valfritt"></div>
+      <div><label>Adress / ort</label><input id="newFactoryAddress" placeholder="valfritt"></div>
+    </div>
+    <div style="margin-top:.5rem"><label>Anteckning</label><textarea id="newFactoryNote" placeholder="valfritt"></textarea></div>
+    <div class="toolbar" style="margin-top:.7rem">
+      <button type="button" class="btn" id="btnCreateBtgFactory">Starta fabrik</button>
+    </div>
+    <div id="btgCreateFactoryMsg" class="pill" style="margin-top:.65rem">Fabriksadminkoden visas här när fabriken har skapats.</div>
+  </form>
+</dialog>
+
+<dialog id="btgFactoryAdminDialog">
+  <form method="dialog" class="container" id="btgFactoryAdminForm" novalidate>
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <h3>Rollhantering och behörighetskoder</h3>
+      <button type="button" class="btn secondary" id="btnCloseFactoryAdmin">Stäng</button>
+    </div>
+    <p class="pill" id="btgFactoryAdminContext">Välj fabrik och skapa rollkoder för användare.</p>
+    <div class="grid grid-3">
+      <div>
+        <label>Roll</label>
+        <select id="newAccessRole">
+          <option value="KONTOR">KONTOR</option>
+          <option value="PRODUKTION">PRODUKTION</option>
+          <option value="LABB">LABB</option>
+          <option value="KVALITET">KVALITET</option>
+          <option value="PREFAB">PREFAB</option>
+          <option value="LASARE">LÄSARE</option>
+          <option value="ADMIN">ADMIN</option>
+        </select>
+      </div>
+      <div><label>Etikett / person</label><input id="newAccessLabel" placeholder="t.ex. Henrik kontor"></div>
+      <div><label>Max användningar</label><input id="newAccessMaxUses" type="number" min="1" value="1"></div>
+      <div><label>Giltig till</label><input id="newAccessExpires" type="date"></div>
+      <div style="align-self:end" class="toolbar"><button type="button" class="btn" id="btnAdminCreateAccessCode">Skapa kod</button></div>
+    </div>
+    <div id="btgGeneratedCodeBox"></div>
+    <div style="margin-top:.8rem">
+      <div class="row" style="justify-content:space-between;align-items:center;"><h4 style="margin:.2rem 0">Senaste koder</h4><button type="button" class="btn secondary" id="btnRefreshAccessCodes">Uppdatera</button></div>
+      <div style="overflow:auto; max-height:360px; margin-top:.4rem">
+        <table id="btgAccessCodesTable"><thead><tr><th>Kod</th><th>Roll</th><th>Etikett</th><th>Använd</th><th>Giltig till</th><th>Status</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- =====================================================
+     v19.5.5 STABIL FABRIKS-/ROLLINIT
+     Ersätter tidigare v19.5-loopar så dashboard/header inte blinkar.
+     ===================================================== -->
+<script id="btg-v19-5-5-stable-factory-access">
+(function(){
+  if (window.__BTG_V1955_STABLE_ACCESS_PATCHED) return;
+  window.__BTG_V1955_STABLE_ACCESS_PATCHED = true;
+
+  const SUPERADMIN_EMAILS = ['j.ottosson53@gmail.com'];
+  const ALL_PERMISSIONS = {
+    dashboard:true,tillverkning:true,bestallningar:true,provningar:true,utvardering:true,kontroll:true,material:true,dagbok:true,
+    prefab:true,prefab_queue:true,avformningskuber:true,demoulding_cubes:true,avvikelser:true,tasks:true,settings:true,nordcert:true,exports:true,imports:true,role_admin:true
+  };
+  const state = window.BTG_FACTORY_ADMIN_STATE = window.BTG_FACTORY_ADMIN_STATE || { loaded:false, factories:[], selectedFactoryId:null, isSuperadmin:false, loading:false };
+
+  function user(){ try { return window.CURRENT_USER || null; } catch(_) { return null; } }
+  function email(){ return String(user()?.email || '').toLowerCase(); }
+  function isSuperadmin(){ return !!user() && SUPERADMIN_EMAILS.includes(email()); }
+  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function closeDialog(id){ const d=document.getElementById(id); try { if(d?.open) d.close(); } catch(_) { d?.removeAttribute('open'); } }
+  function fmtDate(v){ if(!v) return '—'; try { return new Date(v).toLocaleDateString('sv-SE'); } catch(_) { return String(v); } }
+
+  function normFactory(row){
+    if (!row) return null;
+    const id = row.factory_id || row.id;
+    if (!id) return null;
+    return {
+      factory_id: id,
+      factory_name: row.factory_name || row.name || 'Namnlös fabrik',
+      factory_code: row.factory_code || row.join_code || '',
+      user_role: row.user_role || (row.is_superadmin ? 'SUPERADMIN' : null) || row.role_code || '',
+      is_superadmin: !!row.is_superadmin
+    };
+  }
+  function selectedFactory(){
+    const st = window.BTG_FACTORY_ADMIN_STATE || {};
+    const id = st.selectedFactoryId || window.BTG_ACCESS_STATE?.profile?.factory_id || window.BTG_ACCESS_STATE?.factory?.id;
+    return (st.factories || []).find(f => String(f.factory_id) === String(id)) || (st.factories || [])[0] || null;
+  }
+  function roleCode(){
+    if (isSuperadmin()) return 'SUPERADMIN';
+    return String(window.BTG_ACCESS_STATE?.profile?.role_code || selectedFactory()?.user_role || '').toUpperCase();
+  }
+  function canAdminFactory(){
+    const r = roleCode();
+    return isSuperadmin() || r === 'ADMIN' || !!window.BTG_ACCESS_STATE?.permissions?.role_admin;
+  }
+
+  function ensureSelector(){
+    const actions = document.querySelector('.header-actions');
+    if (!actions) return null;
+    let wrap = document.getElementById('btgFactorySelectorWrap');
+    if (!wrap){
+      wrap = document.createElement('div');
+      wrap.id = 'btgFactorySelectorWrap';
+      wrap.innerHTML = '<label for="btgFactorySelector">Fabrik</label><select id="btgFactorySelector"></select><small class="btg-factory-fallback-note" style="color:var(--muted);font-size:.72rem"></small>';
+      actions.insertBefore(wrap, actions.firstChild);
+    } else if (!wrap.querySelector('.btg-factory-fallback-note')) {
+      const note=document.createElement('small'); note.className='btg-factory-fallback-note'; note.style.cssText='color:var(--muted);font-size:.72rem'; wrap.appendChild(note);
+    }
+    const sel = document.getElementById('btgFactorySelector');
+    if (sel && !sel.__btgV1955Bound){
+      sel.__btgV1955Bound = true;
+      sel.addEventListener('change', e => {
+        const id = e.target.value || '';
+        window.BTG_FACTORY_ADMIN_STATE.selectedFactoryId = id || null;
+        try { localStorage.setItem('btg_selected_factory_id', id); } catch(_) {}
+        applySelectedAccess();
+        renderStableUi();
+      });
+    }
+    return wrap;
+  }
+  function ensureSetupCard(){
+    const dash = document.getElementById('tab-dashboard');
+    if (!dash) return null;
+    let card = document.getElementById('btgFactorySetupCard');
+    if (!card){
+      card = document.createElement('div');
+      card.id = 'btgFactorySetupCard';
+      card.className = 'card';
+      card.innerHTML = '<h3>Fabrik och behörighet</h3><div id="btgFactorySetupBody"></div>';
+      dash.insertBefore(card, dash.firstChild);
+    }
+    return card;
+  }
+
+  function applySelectedAccess(){
+    const u = user();
+    const f = selectedFactory();
+    if (!u) return;
+    if (isSuperadmin()){
+      window.BTG_ACCESS_STATE = {
+        loaded:true,
+        profile:{ id:'superadmin', user_id:u.id, factory_id:f?.factory_id || null, role_code:'SUPERADMIN', permissions:{...ALL_PERMISSIONS} },
+        factory:f ? { id:f.factory_id, name:f.factory_name, factory_code:f.factory_code } : null,
+        permissions:{...ALL_PERMISSIONS},
+        error:null
       };
-      saveRecipeToSupabase.__btgPressMergePatched = true;
+      window.BTG_ROLE_STATE = { loaded:true, role:'admin', factory:window.BTG_ACCESS_STATE.factory, member:null };
+      document.body.classList.remove('btg-access-locked','role-requester');
+      document.body.classList.add('btg-v195-superadmin');
+      document.querySelectorAll('.main-nav [data-tab], nav.toolbar [data-tab]').forEach(btn => { btn.style.display = ''; });
+      ['btnSettings','btnNordcert','btnExportAll','btnImportAll'].forEach(id => { const el=document.getElementById(id); if(el) el.style.display=''; });
+    }
+    const txt = 'Roll: ' + (roleCode() || '—') + (f?.factory_name ? ' • ' + f.factory_name : '');
+    ['btgAccessBadge','roleAccessBadge'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent = txt; });
+  }
+
+  function renderStableUi(){
+    ensureSetupCard(); ensureSelector();
+    const st = window.BTG_FACTORY_ADMIN_STATE || {};
+    const rows = st.factories || [];
+    const f = selectedFactory();
+    const wrap = document.getElementById('btgFactorySelectorWrap');
+    const sel = document.getElementById('btgFactorySelector');
+    if (wrap && sel){
+      const show = !!user() && (isSuperadmin() || rows.length > 0);
+      wrap.style.display = show ? 'grid' : 'none';
+      sel.innerHTML = rows.length
+        ? rows.map(x => '<option value="' + esc(x.factory_id) + '" ' + (String(x.factory_id) === String(st.selectedFactoryId) ? 'selected' : '') + '>' + esc(x.factory_name || 'Fabrik') + (x.user_role ? ' – ' + esc(x.user_role) : '') + '</option>').join('')
+        : '<option value="">Ingen fabrik skapad ännu</option>';
+      const note = wrap.querySelector('.btg-factory-fallback-note');
+      if (note) note.textContent = rows.length ? '' : (isSuperadmin() ? 'Superadmin aktiv. Skapa eller migrera en fabrik om listan är tom.' : '');
+    }
+    const body = document.getElementById('btgFactorySetupBody');
+    if (body){
+      let status = 'Logga in för att skapa fabrik eller ange behörighetskod.';
+      if (user()){
+        if (isSuperadmin()) status = 'Aktiv roll: SUPERADMIN' + (f?.factory_name ? ' • vald fabrik: ' + esc(f.factory_name) : ' • ingen fabrik vald/skapat ännu');
+        else if (window.BTG_ACCESS_STATE?.profile) status = 'Aktiv åtkomst: ' + esc(roleCode() || '—') + (f?.factory_name ? ' • ' + esc(f.factory_name) : (window.BTG_ACCESS_STATE?.factory?.name ? ' • ' + esc(window.BTG_ACCESS_STATE.factory.name) : ''));
+        else status = 'Ditt konto saknar aktiv fabrik/roll.';
+      }
+      body.innerHTML = '<div class="kpi"><div>🏭</div><div><div style="font-weight:800">' + status + '</div><small class="muted">Skapa fabrik, ange kod eller administrera rollkoder för vald fabrik.</small></div></div>' +
+        '<div class="factory-actions">' +
+        '<button type="button" class="btn" id="btnOpenCreateFactory">Skapa ny fabrik</button>' +
+        '<button type="button" class="btn secondary" id="btnOpenAccessCode">Ange behörighetskod</button>' +
+        (canAdminFactory() ? '<button type="button" class="btn secondary" id="btnOpenFactoryAdmin">Rollhantering / skapa koder</button>' : '') +
+        '</div>';
+      document.getElementById('btnOpenCreateFactory')?.addEventListener('click', openCreateFactoryDialog);
+      document.getElementById('btnOpenAccessCode')?.addEventListener('click', () => { const d=document.getElementById('btgAccessDialog'); try { d?.showModal(); } catch(_) { d?.setAttribute('open','open'); } setTimeout(()=>document.getElementById('btgAccessCodeInput')?.focus(),50); });
+      document.getElementById('btnOpenFactoryAdmin')?.addEventListener('click', openFactoryAdminDialog);
     }
   }
 
-  onReady(function(){
-    ensureDialog();
-    installDeviationScopeFix();
-    installRenderPatch();
-    setTimeout(() => { try { addRecipeButtons(); } catch(e){} }, 300);
-  });
+  async function tryRpc(name, args){
+    try{
+      const call = window.sb.rpc(name, args || {});
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout: ' + name)), 5500));
+      const { data, error } = await Promise.race([call, timeout]);
+      if (error) throw error;
+      return Array.isArray(data) ? data : [];
+    }catch(e){ console.warn('v19.5.5 RPC misslyckades:', name, e); return []; }
+  }
+  async function refreshFactories(){
+    if (state.loading) return;
+    const u = user();
+    if (!u || !window.sb){
+      Object.assign(state, { loaded:true, loading:false, factories:[], selectedFactoryId:null, isSuperadmin:false });
+      renderStableUi(); return;
+    }
+    state.loading = true;
+    try{
+      let rows = [];
+      if (isSuperadmin()) rows = await tryRpc('btg_superadmin_all_factories');
+      if (!rows.length) rows = await tryRpc('btg_list_accessible_factories');
+      rows = rows.map(normFactory).filter(Boolean);
+      if (isSuperadmin() && !rows.length){
+        try{
+          const { data, error } = await sb.from('factories').select('id,name,factory_code,join_code,active,created_at').order('created_at', { ascending:false });
+          if (!error) rows = (Array.isArray(data) ? data : []).filter(x => x.active !== false).map(normFactory).filter(Boolean);
+        }catch(e){ console.warn('v19.5.5 direktläsning factories misslyckades:', e); }
+      }
+      const seen = new Set(); rows = rows.filter(f => { const k=String(f.factory_id); if(seen.has(k)) return false; seen.add(k); return true; });
+      let selected = null;
+      try { selected = localStorage.getItem('btg_selected_factory_id'); } catch(_) {}
+      if (!selected || !rows.some(f => String(f.factory_id) === String(selected))) selected = window.BTG_ACCESS_STATE?.profile?.factory_id || rows[0]?.factory_id || null;
+      Object.assign(state, { loaded:true, loading:false, factories:rows, selectedFactoryId:selected, isSuperadmin:isSuperadmin() || rows.some(f => f.is_superadmin) });
+      applySelectedAccess();
+      renderStableUi();
+    }finally{ state.loading = false; }
+  }
+
+  function openCreateFactoryDialog(){
+    const d=document.getElementById('btgCreateFactoryDialog');
+    const msg=document.getElementById('btgCreateFactoryMsg');
+    if (msg){ msg.className='pill'; msg.textContent='Fabriksadminkoden visas här när fabriken har skapats.'; }
+    try { d?.showModal(); } catch(_) { d?.setAttribute('open','open'); }
+  }
+  async function createFactory(){
+    if (!window.sb || !user()) { alert('Du måste vara inloggad.'); return; }
+    const btn=document.getElementById('btnCreateBtgFactory'), msg=document.getElementById('btgCreateFactoryMsg');
+    const old=btn?.textContent || 'Starta fabrik'; if(btn){btn.disabled=true;btn.textContent='Skapar…';}
+    if(msg){msg.className='pill';msg.textContent='Skapar fabrik och fabriksadminkod…';}
+    try{
+      const { data, error } = await sb.rpc('btg_create_factory_with_admin_code', {
+        p_name: document.getElementById('newFactoryName')?.value.trim(),
+        p_factory_code: document.getElementById('newFactoryCode')?.value.trim() || null,
+        p_org_number: document.getElementById('newFactoryOrg')?.value.trim() || null,
+        p_address: document.getElementById('newFactoryAddress')?.value.trim() || null,
+        p_contact_name: document.getElementById('newFactoryContactName')?.value.trim() || null,
+        p_contact_email: document.getElementById('newFactoryContactEmail')?.value.trim() || null,
+        p_note: document.getElementById('newFactoryNote')?.value.trim() || null
+      });
+      if(error) throw error;
+      const row=Array.isArray(data)?data[0]:data;
+      if(msg){
+        msg.className='admin-code-box';
+        msg.innerHTML='<b>Fabriken är skapad.</b><br>Fabriksadminkod:<br><span class="generated-code">'+esc(row?.admin_code || '')+'</span><br><small class="muted">Kopiera koden och ange den under “Ange behörighetskod” för att aktivera adminåtkomst.</small><div class="toolbar" style="margin-top:.5rem"><button type="button" class="btn secondary" id="btnCopyAdminCode">Kopiera kod</button><button type="button" class="btn" id="btnUseAdminCodeNow">Ange koden nu</button></div>';
+        document.getElementById('btnCopyAdminCode')?.addEventListener('click',()=>navigator.clipboard?.writeText(row?.admin_code || ''));
+        document.getElementById('btnUseAdminCodeNow')?.addEventListener('click',()=>{ closeDialog('btgCreateFactoryDialog'); const d=document.getElementById('btgAccessDialog'); try{d?.showModal();}catch(_){d?.setAttribute('open','open');} const input=document.getElementById('btgAccessCodeInput'); if(input) input.value=row?.admin_code || ''; input?.focus(); });
+      }
+      await refreshFactories();
+    }catch(e){ if(msg){msg.className='pill danger';msg.textContent=e.message || String(e);} }
+    finally{ if(btn){btn.disabled=false;btn.textContent=old;} }
+  }
+
+  function openFactoryAdminDialog(){
+    if (!canAdminFactory()) { alert('Endast fabriksadmin eller superadmin kan skapa rollkoder.'); return; }
+    const f=selectedFactory();
+    if (!f) { alert('Välj eller skapa en fabrik först.'); return; }
+    const ctx=document.getElementById('btgFactoryAdminContext'); if(ctx) ctx.textContent='Fabrik: '+(f.factory_name || '—')+'. Skapa koder och dela dem med användare som ska ansluta sig.';
+    const box=document.getElementById('btgGeneratedCodeBox'); if(box) box.innerHTML='';
+    const d=document.getElementById('btgFactoryAdminDialog'); try{d?.showModal();}catch(_){d?.setAttribute('open','open');}
+    refreshAccessCodes();
+  }
+  async function adminCreateAccessCode(){
+    const f=selectedFactory(); if(!f || !window.sb) return;
+    const btn=document.getElementById('btnAdminCreateAccessCode'), box=document.getElementById('btgGeneratedCodeBox');
+    const old=btn?.textContent || 'Skapa kod'; if(btn){btn.disabled=true;btn.textContent='Skapar…';}
+    try{
+      const expires=document.getElementById('newAccessExpires')?.value;
+      const { data, error } = await sb.rpc('btg_admin_create_access_code', {
+        p_factory_id:f.factory_id,
+        p_role_code:document.getElementById('newAccessRole')?.value,
+        p_label:document.getElementById('newAccessLabel')?.value.trim() || null,
+        p_max_uses:Number(document.getElementById('newAccessMaxUses')?.value || 1),
+        p_expires_at:expires ? expires+'T23:59:59+00:00' : null
+      });
+      if(error) throw error;
+      const row=Array.isArray(data)?data[0]:data;
+      if(box) box.innerHTML='<div class="admin-code-box"><b>Ny kod skapad:</b><br><span class="generated-code">'+esc(row?.code || '')+'</span><br><small class="muted">Roll: '+esc(row?.role_code || '')+' • Max användningar: '+esc(row?.max_uses || '')+'</small><div class="toolbar" style="margin-top:.5rem"><button type="button" class="btn secondary" id="btnCopyGeneratedCode">Kopiera kod</button></div></div>';
+      document.getElementById('btnCopyGeneratedCode')?.addEventListener('click',()=>navigator.clipboard?.writeText(row?.code || ''));
+      const lbl=document.getElementById('newAccessLabel'); if(lbl) lbl.value='';
+      await refreshAccessCodes();
+    }catch(e){ if(box) box.innerHTML='<div class="pill danger">'+esc(e.message || String(e))+'</div>'; }
+    finally{ if(btn){btn.disabled=false;btn.textContent=old;} }
+  }
+  async function refreshAccessCodes(){
+    const f=selectedFactory(); const tbody=document.querySelector('#btgAccessCodesTable tbody');
+    if(!f || !tbody || !window.sb) return;
+    tbody.innerHTML='<tr><td colspan="6">Laddar…</td></tr>';
+    try{
+      const { data, error } = await sb.rpc('btg_admin_list_access_codes', { p_factory_id:f.factory_id });
+      if(error) throw error;
+      const rows=Array.isArray(data)?data:[];
+      tbody.innerHTML=rows.length ? rows.map(r=>'<tr><td><b>'+esc(r.code)+'</b></td><td>'+esc(r.role_code)+'</td><td>'+esc(r.label || '')+'</td><td>'+esc(r.used_count)+' / '+esc(r.max_uses)+'</td><td>'+esc(fmtDate(r.expires_at))+'</td><td>'+(r.active?'<span class="pill ok">Aktiv</span>':'<span class="pill danger">Inaktiv</span>')+'</td></tr>').join('') : '<tr><td colspan="6">Inga koder skapade ännu.</td></tr>';
+    }catch(e){ tbody.innerHTML='<tr><td colspan="6"><span class="pill danger">'+esc(e.message || String(e))+'</span></td></tr>'; }
+  }
+
+  function patchCoreHooks(){
+    if (window.__BTG_V1955_CORE_HOOKED) return;
+    window.__BTG_V1955_CORE_HOOKED = true;
+    const oldApply = window.applyAccessState;
+    window.applyAccessState = function(){
+      if (isSuperadmin()) { applySelectedAccess(); renderStableUi(); return window.BTG_ACCESS_STATE; }
+      const res = typeof oldApply === 'function' ? oldApply.apply(this, arguments) : undefined;
+      renderStableUi();
+      return res;
+    };
+    const oldLoad = window.loadAccessState;
+    window.loadAccessState = async function(){
+      if (isSuperadmin()) { await refreshFactories(); return window.BTG_ACCESS_STATE; }
+      const res = typeof oldLoad === 'function' ? await oldLoad.apply(this, arguments) : window.BTG_ACCESS_STATE;
+      await refreshFactories();
+      return res;
+    };
+  }
+
+  function bindButtons(){
+    if (window.__BTG_V1955_BUTTONS_BOUND) return;
+    window.__BTG_V1955_BUTTONS_BOUND = true;
+    document.getElementById('btnCloseCreateFactory')?.addEventListener('click',()=>closeDialog('btgCreateFactoryDialog'));
+    document.getElementById('btnCreateBtgFactory')?.addEventListener('click',createFactory);
+    document.getElementById('btnCloseFactoryAdmin')?.addEventListener('click',()=>closeDialog('btgFactoryAdminDialog'));
+    document.getElementById('btnAdminCreateAccessCode')?.addEventListener('click',adminCreateAccessCode);
+    document.getElementById('btnRefreshAccessCodes')?.addEventListener('click',refreshAccessCodes);
+  }
+  function init(){
+    ensureSetupCard(); ensureSelector(); bindButtons(); patchCoreHooks();
+    applySelectedAccess(); renderStableUi(); refreshFactories();
+    setTimeout(()=>{ applySelectedAccess(); renderStableUi(); refreshFactories(); }, 900);
+    try { window.sb?.auth?.onAuthStateChange?.(() => setTimeout(()=>{ applySelectedAccess(); renderStableUi(); refreshFactories(); }, 600)); } catch(_) {}
+  }
+
+  window.loadFactoryAdminState = refreshFactories;
+  window.openFactoryAdminDialog = openFactoryAdminDialog;
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
 </script>
-<!-- ==== End v18.12.1 SAFE PATCH ==== -->
+
+
+<!-- =====================================================
+     v19.5.6 FIX – stabil behörighetskodmodal + Supabase-åtkomst
+     - tar bort gammal auto-close
+     - säkerställer att kodaktivering använder samma Supabase-klient
+     ===================================================== -->
+<script id="btg-v19-5-6-access-dialog-stabilizer">
+(function(){
+  if (window.__BTG_V1956_ACCESS_STABILIZER) return;
+  window.__BTG_V1956_ACCESS_STABILIZER = true;
+
+  function client(){ return (typeof window.btgGetSupabaseClient === 'function' ? window.btgGetSupabaseClient() : (window.sb || null)); }
+  function user(){ try { return window.CURRENT_USER || null; } catch(_) { return null; } }
+  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function setMessage(text, kind){ const el=document.getElementById('btgAccessMessage'); if(el){ el.className='pill '+(kind||''); el.textContent=text; } }
+  function openAccessDialogStable(){
+    const dlg=document.getElementById('btgAccessDialog');
+    if(!dlg) return;
+    setMessage('Koden kopplar dig till rätt fabrik, roll och moduler.', '');
+    try { if(!dlg.open) dlg.showModal(); } catch(_) { dlg.setAttribute('open','open'); }
+    setTimeout(function(){ document.getElementById('btgAccessCodeInput')?.focus(); }, 60);
+  }
+  async function redeemAccessCodeStable(){
+    const input=document.getElementById('btgAccessCodeInput');
+    const code=(input?.value || '').trim().toUpperCase();
+    if(!code){ setMessage('Ange behörighetskod.', 'warn'); input?.focus(); return; }
+    if(!user()){ setMessage('Du måste vara inloggad först.', 'warn'); return; }
+    const supa=client();
+    if(!supa){ setMessage('Supabase är inte tillgängligt ännu. Ladda om sidan hårt och logga in igen.', 'danger'); return; }
+    const btn=document.getElementById('btnRedeemBtgAccessCode');
+    const old=btn?.textContent || 'Aktivera åtkomst';
+    if(btn){ btn.disabled=true; btn.textContent='Aktiverar…'; }
+    setMessage('Kontrollerar kod…', '');
+    try{
+      const { data, error } = await supa.rpc('redeem_btg_access_code', { p_code: code });
+      if(error) throw error;
+      if(input) input.value='';
+      setMessage('Åtkomst aktiverad. Uppdaterar fabrik och roll…', 'ok');
+      try { if (typeof window.loadAccessState === 'function') await window.loadAccessState(); } catch(e){ console.warn('v19.5.6 loadAccessState:', e); }
+      try { if (typeof window.loadFactoryAdminState === 'function') await window.loadFactoryAdminState(); } catch(e){ console.warn('v19.5.6 loadFactoryAdminState:', e); }
+      try { if (typeof window.loadCloudCoreData === 'function') await window.loadCloudCoreData(); } catch(e){ console.warn('v19.5.6 loadCloudCoreData:', e); }
+      const dlg=document.getElementById('btgAccessDialog'); try { dlg?.close(); } catch(_) { dlg?.removeAttribute('open'); }
+      const role = (window.BTG_ACCESS_STATE?.profile?.role_code || 'aktiverad');
+      const factory = window.BTG_ACCESS_STATE?.factory?.name || window.BTG_ACCESS_STATE?.factory?.factory_name || '';
+      alert('Åtkomst aktiverad: ' + role + (factory ? ' – ' + factory : ''));
+    }catch(e){
+      setMessage(e?.message || String(e || 'Kunde inte aktivera koden.'), 'danger');
+    }finally{
+      if(btn){ btn.disabled=false; btn.textContent=old; }
+    }
+  }
+
+  function rebind(){
+    const openBtn=document.getElementById('btnOpenAccessCode');
+    if(openBtn && !openBtn.__btgV1956Stable){ openBtn.__btgV1956Stable=true; openBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openAccessDialogStable(); }, true); }
+    const redeem=document.getElementById('btnRedeemBtgAccessCode');
+    if(redeem && !redeem.__btgV1956Stable){ redeem.__btgV1956Stable=true; redeem.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); redeemAccessCodeStable(); }, true); }
+    const input=document.getElementById('btgAccessCodeInput');
+    if(input && !input.__btgV1956Stable){ input.__btgV1956Stable=true; input.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); e.stopPropagation(); redeemAccessCodeStable(); } }, true); }
+  }
+  window.openBtgAccessDialogStable = openAccessDialogStable;
+  window.redeemBtgAccessCodeStable = redeemAccessCodeStable;
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', rebind); else rebind();
+  setTimeout(rebind, 250);
+  setTimeout(rebind, 1000);
+})();
+</script>
+
+
+<!-- =====================================================
+     v19.5.7 FIX – stabil flikstyrning för anslutna konton
+     Stoppar äldre prefab/factory_members-omdirigering från att
+     flytta användaren från Dashboard när ny v19.5-rollprofil finns.
+     ===================================================== -->
+<script id="btg-v19-5-7-stable-access-navigation">
+(function(){
+  if (window.__BTG_V1957_STABLE_NAV_PATCHED) return;
+  window.__BTG_V1957_STABLE_NAV_PATCHED = true;
+
+  try {
+    if (!Object.getOwnPropertyDescriptor(window, 'CURRENT_USER')) {
+      Object.defineProperty(window, 'CURRENT_USER', { configurable:true, get:function(){ try { return CURRENT_USER || null; } catch(_) { return null; } } });
+    }
+  } catch(_) {}
+
+  const TAB_LABELS = {
+    dashboard:'Dashboard', tillverkning:'Tillverkningsdata', bestallningar:'Beställningar', provningar:'Provningar', utvardering:'Utvärdering',
+    kontroll:'Kontroll', material:'Material', dagbok:'Dagbok', prefab:'Prefabkö', avformningskuber:'Avformningskuber', avvikelser:'Avvikelser'
+  };
+  const ORDER = ['dashboard','tillverkning','bestallningar','prefab','avformningskuber','provningar','utvardering','kontroll','material','dagbok','avvikelser'];
+  let lastManualTab = { tab:null, at:0 };
+  let safeTabBusy = false;
+
+  function user(){ try { return CURRENT_USER || window.CURRENT_USER || null; } catch(_) { return window.CURRENT_USER || null; } }
+  function perms(){ return window.BTG_ACCESS_STATE?.permissions || {}; }
+  function profile(){ return window.BTG_ACCESS_STATE?.profile || null; }
+  function role(){ return String(profile()?.role_code || '').toUpperCase(); }
+  function currentTab(){ return document.querySelector('.tab-btn[aria-current="page"]')?.dataset?.tab || 'dashboard'; }
+  function firstAllowed(){ const p=perms(); return ORDER.find(t => p[t]) || 'dashboard'; }
+  function isAllowed(tab){
+    if (!user()) return true;
+    const st = window.BTG_ACCESS_STATE || {};
+    if (!st.loaded) return true;
+    if (!st.profile) return tab === 'dashboard';
+    return !!st.permissions?.[tab];
+  }
+  function isRecentManual(tab){ return lastManualTab.tab === tab && (Date.now() - lastManualTab.at) < 1200; }
+  function normalizeOldRoleLayer(){
+    try { document.body.classList.remove('role-requester'); } catch(_) {}
+    try {
+      const st = window.BTG_ACCESS_STATE || {};
+      if (user() && st.loaded && st.profile) {
+        window.BTG_ROLE_STATE = {
+          loaded:true,
+          role:'admin',
+          factory:st.factory || null,
+          member:{ factory_id:st.profile.factory_id || null, role:'admin' }
+        };
+        const badge = document.getElementById('roleAccessBadge');
+        if (badge) {
+          const f = st.factory?.name ? ' • ' + st.factory.name : '';
+          badge.textContent = 'Roll: ' + (st.profile.role_code || '—') + f;
+          badge.title = 'Roll styrs av v19.5 behörighetssystem.';
+        }
+      }
+    } catch(_) {}
+  }
+  function setHeaderBadges(){
+    try {
+      const st = window.BTG_ACCESS_STATE || {};
+      const txt = user()
+        ? (st.profile ? ('Roll: ' + (st.profile.role_code || '—') + (st.factory?.name ? ' • ' + st.factory.name : '')) : 'Behörighetskod krävs')
+        : 'Ej inloggad';
+      ['btgAccessBadge','roleAccessBadge'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent = txt; });
+    } catch(_) {}
+  }
+  function showOnlyTab(name){
+    const known = new Set(Object.keys(window.tabs || {}));
+    document.querySelectorAll('.main-nav [data-tab], nav.toolbar [data-tab], [data-nav]').forEach(el => {
+      const t = el.dataset?.tab || el.getAttribute?.('data-nav');
+      if (t) known.add(t);
+    });
+    known.add('dashboard');
+    known.forEach(t => {
+      const el = (window.tabs && window.tabs[t]) || document.getElementById('tab-' + t);
+      if (el) el.style.display = (t === name ? 'grid' : 'none');
+    });
+    document.querySelectorAll('.tab-btn[data-tab], .main-nav [data-tab]').forEach(btn => {
+      btn.setAttribute('aria-current', btn.dataset.tab === name ? 'page' : 'false');
+    });
+  }
+  function renderTab(name){
+    try {
+      if (name === 'dashboard') { if (typeof renderDashboard === 'function') renderDashboard(); if (typeof window.renderStableUi === 'function') window.renderStableUi(); }
+      if (name === 'tillverkning') { renderRecipes?.(); renderRecipeSelects?.(); renderBatchForm?.(); renderBatches?.(); }
+      if (name === 'bestallningar') { renderCustomers?.(); renderOrderForm?.(); renderOrders?.(); }
+      if (name === 'provningar') { renderCubeForm?.(); renderCubes?.(); renderAirForm?.(); renderAir?.(); }
+      if (name === 'utvardering') { initEvaluationTab?.(); }
+      if (name === 'kontroll') { renderControlDevices?.(); }
+      if (name === 'material') { renderMaterials?.(); }
+      if (name === 'dagbok') { renderDiaryInit?.(); }
+      if (name === 'prefab') { window.loadPrefabModule?.(); }
+      if (name === 'avformningskuber') { window.loadDemouldingCubes?.().then(()=>window.renderDemouldingHistory?.()).catch(()=>{}); }
+      if (name === 'avvikelser') { window.loadDeviations?.(); }
+    } catch(e){ console.warn('v19.5.7 renderTab:', e); }
+  }
+  async function ensureAccess(){
+    const st = window.BTG_ACCESS_STATE || {};
+    if (user() && !st.loaded && typeof window.loadAccessState === 'function') {
+      try { await window.loadAccessState(); } catch(e){ console.warn('v19.5.7 loadAccessState:', e); }
+    }
+  }
+  async function safeSetTab(name){
+    if (safeTabBusy) return;
+    safeTabBusy = true;
+    try {
+      name = name || 'dashboard';
+      await ensureAccess();
+      normalizeOldRoleLayer();
+
+      // Äldre prefab/factory_members-lagret kan försöka skicka anslutna konton till prefab automatiskt.
+      // Tillåt manuell prefab-klickning, men blockera automatisk om dashboard är tillåten i nya rollen.
+      if (name === 'prefab' && !isRecentManual('prefab') && profile() && perms().dashboard && role() !== 'PREFAB' && currentTab() === 'dashboard') {
+        name = 'dashboard';
+      }
+
+      if (!isAllowed(name)) {
+        name = profile() ? firstAllowed() : 'dashboard';
+      }
+
+      showOnlyTab(name);
+      renderTab(name);
+      normalizeOldRoleLayer();
+      setHeaderBadges();
+      try { document.body.classList.remove('sidebar-open'); } catch(_) {}
+    } finally {
+      safeTabBusy = false;
+    }
+  }
+
+  function bindManualClicks(){
+    document.addEventListener('click', function(e){
+      const btn = e.target?.closest?.('[data-tab], [data-nav]');
+      const tab = btn?.dataset?.tab || btn?.getAttribute?.('data-nav');
+      if (!tab) return;
+      lastManualTab = { tab, at:Date.now() };
+    }, true);
+  }
+
+  function patchCore(){
+    try { window.applyRoleBasedAccess = normalizeOldRoleLayer; } catch(_) {}
+    try { window.setTab = setTab = safeSetTab; } catch(_) { window.setTab = safeSetTab; }
+
+    const oldLoad = window.loadCloudCoreData;
+    if (typeof oldLoad === 'function' && !oldLoad.__btgV1957Wrapped) {
+      const wrapped = async function(){
+        const before = currentTab();
+        const res = await oldLoad.apply(this, arguments);
+        normalizeOldRoleLayer();
+        setHeaderBadges();
+        // Om äldre lager bytte flik under molnladdning: återställ till tidigare tillåten flik.
+        setTimeout(function(){
+          const after = currentTab();
+          if (before && before !== after && isAllowed(before) && !isRecentManual(after)) safeSetTab(before);
+          else normalizeOldRoleLayer();
+        }, 20);
+        return res;
+      };
+      wrapped.__btgV1957Wrapped = true;
+      window.loadCloudCoreData = loadCloudCoreData = wrapped;
+    }
+  }
+
+  function init(){
+    bindManualClicks();
+    patchCore();
+    normalizeOldRoleLayer();
+    setHeaderBadges();
+    setTimeout(function(){ normalizeOldRoleLayer(); setHeaderBadges(); }, 400);
+    setTimeout(function(){ normalizeOldRoleLayer(); setHeaderBadges(); if (currentTab() !== 'dashboard' && profile() && perms().dashboard && !isRecentManual(currentTab())) safeSetTab('dashboard'); }, 1400);
+    try { window.sb?.auth?.onAuthStateChange?.(() => setTimeout(function(){ normalizeOldRoleLayer(); setHeaderBadges(); }, 700)); } catch(_) {}
+  }
+
+  window.btgNormalizeOldRoleLayer = normalizeOldRoleLayer;
+  window.btgStableSetTab = safeSetTab;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+
+
+<!-- =========================================================
+     v19.5.8 SIDEBAR STATUS READABILITY FIX
+     Isolerad UI-patch: visar hela inloggnings-/roll-/fabriksstatusen
+     i sidomenyn utan att ändra behörighetslogik.
+========================================================= -->
+<style id="btg-v19-5-8-sidebar-status-style">
+  /* Desktop/sidebar: gör statusraderna flerradiga och fullbredda. */
+  @media (min-width: 901px){
+    header .header-actions {
+      grid-template-columns: auto minmax(0, 1fr) !important;
+      align-items: start !important;
+    }
+    header .header-actions #authStatus,
+    header .header-actions #btgAccessBadge,
+    header .header-actions #roleAccessBadge {
+      grid-column: 1 / -1 !important;
+      display: block !important;
+      width: 100% !important;
+      max-width: none !important;
+      white-space: normal !important;
+      overflow: visible !important;
+      text-overflow: clip !important;
+      line-height: 1.35 !important;
+      overflow-wrap: anywhere !important;
+    }
+    header .header-actions #btgFactorySelectorWrap {
+      grid-column: 1 / -1 !important;
+      width: 100% !important;
+    }
+    header .header-actions #btgFactorySelector {
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
+    header .header-actions .cloud-indicator {
+      align-self: center !important;
+    }
+  }
+
+  /* Mobil sidomeny: samma förbättring när menyn är öppnad. */
+  @media (max-width: 900px){
+    header .header-actions #authStatus,
+    header .header-actions #btgAccessBadge,
+    header .header-actions #roleAccessBadge,
+    header .header-actions #btgFactorySelectorWrap {
+      grid-column: 1 / -1 !important;
+      width: 100% !important;
+      max-width: none !important;
+      white-space: normal !important;
+      overflow: visible !important;
+      text-overflow: clip !important;
+      line-height: 1.35 !important;
+      overflow-wrap: anywhere !important;
+    }
+    header .header-actions #btgFactorySelector { width: 100% !important; min-width: 0 !important; }
+  }
+</style>
+
+
+<!-- =========================================================
+     v19.5.9 CLICK SAFETY CSS
+     Säkerställer att statusrader inte skapar osynliga klicklager.
+========================================================= -->
+<style id="btg-v19-5-9-click-safety-style">
+  header .header-actions { pointer-events: auto !important; }
+  header .header-actions > * { pointer-events: auto !important; }
+  main, main * { pointer-events: auto; }
+</style>
+
+<script id="btg-v19-5-9-sidebar-click-fix">
+(function(){
+  if (window.__BTG_V1959_SIDEBAR_CLICK_FIX_PATCHED) return;
+  window.__BTG_V1959_SIDEBAR_CLICK_FIX_PATCHED = true;
+
+  /*
+    v19.5.9: v19.5.8 observerade även attribut och satte samtidigt title-attribut.
+    Det kunde skapa en tät MutationObserver-loop som gjorde att klick i appen låste sig.
+    Denna ersätter title-synken med en throttlad variant som inte observerar attribut.
+  */
+  var scheduled = false;
+
+  function setTitleIfChanged(el, value){
+    if (!el) return;
+    value = String(value || '').trim();
+    if (el.getAttribute('title') !== value) el.setAttribute('title', value);
+  }
+
+  function syncTitlesNow(){
+    scheduled = false;
+    ['authStatus','btgAccessBadge','roleAccessBadge'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) setTitleIfChanged(el, el.textContent || '');
+    });
+    var sel = document.getElementById('btgFactorySelector');
+    if (sel && sel.selectedOptions && sel.selectedOptions[0]) {
+      setTitleIfChanged(sel, sel.selectedOptions[0].textContent || '');
+    }
+  }
+
+  function syncTitles(){
+    if (scheduled) return;
+    scheduled = true;
+    setTimeout(syncTitlesNow, 80);
+  }
+
+  function init(){
+    syncTitles();
+    setTimeout(syncTitles, 500);
+    setTimeout(syncTitles, 1500);
+    try { window.sb?.auth?.onAuthStateChange?.(function(){ setTimeout(syncTitles, 700); }); } catch(_) {}
+
+    var target = document.querySelector('.header-actions');
+    if (target && window.MutationObserver){
+      new MutationObserver(syncTitles).observe(target, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+
+
+
+<!-- =====================================================
+     v19.5.14b FACTORY DATA COMPATIBILITY – SAFE INSERT
+     Korrigerad från v19.5.14: patchen ligger nu längst ned i body,
+     inte inne i PDF/print-template. Ingen synlig text på dashboarden.
+     ===================================================== -->
+<script id="btg-v19-5-14b-factory-data-compat-safe">
+(function(){
+  if (window.__BTG_V19514_FACTORY_DATA_COMPAT) return;
+  window.__BTG_V19514_FACTORY_DATA_COMPAT = true;
+
+  let loadingFactoryData = false;
+  let lastFactoryLoadKey = '';
+
+  function sbClient(){ try { return window.sb || sb || null; } catch(_) { return window.sb || null; } }
+  function user(){ try { return window.CURRENT_USER || CURRENT_USER || null; } catch(_) { return window.CURRENT_USER || null; } }
+  function activeFactoryId(){
+    try {
+      return window.BTG_FACTORY_ADMIN_STATE?.selectedFactoryId
+        || window.BTG_ACCESS_STATE?.profile?.factory_id
+        || window.BTG_ACCESS_STATE?.factory?.id
+        || window.BTG_ACCESS_STATE?.factory?.factory_id
+        || null;
+    } catch(_) { return null; }
+  }
+  function uniq(arr){ return Array.from(new Set((arr || []).filter(Boolean).map(String))); }
+
+  async function getFactoryUserIds(factoryId){
+    const sbc = sbClient();
+    if (!sbc || !factoryId) return [];
+    const { data, error } = await sbc.rpc('btg_factory_user_ids', { p_factory_id: factoryId });
+    if (error) throw error;
+    return uniq((data || []).map(r => r.user_id || r.uid || r));
+  }
+
+  function applyCoreData(results){
+    const [recipesRes, materialsRes, batchesRes, cubesRes, airRes, customersRes, ordersRes, controlRes, diaryRes, tasksRes] = results;
+    if (recipesRes.error) throw recipesRes.error;
+    if (materialsRes.error) throw materialsRes.error;
+    if (batchesRes.error) throw batchesRes.error;
+    if (cubesRes.error) throw cubesRes.error;
+    if (airRes.error) throw airRes.error;
+    if (customersRes.error) throw customersRes.error;
+    if (ordersRes.error) throw ordersRes.error;
+    if (controlRes.error) throw controlRes.error;
+    if (diaryRes.error) throw diaryRes.error;
+    if (tasksRes.error) throw tasksRes.error;
+
+    RECIPES = (recipesRes.data || []).map(normalizeRecipeRow);
+    MATERIALS = (materialsRes.data || []).map(normalizeMaterialRow);
+    BATCHES = (batchesRes.data || []).map(normalizeBatchRow);
+    CUBES = (cubesRes.data || []).map(normalizeCubeRow);
+    AIR = (airRes.data || []).map(normalizeAirRow);
+    CUSTOMERS = (customersRes.data || []).map(normalizeCustomerRow);
+    ORDERS = (ordersRes.data || []).map(normalizeOrderRow);
+    CONTROL_DEVICES = (controlRes.data || []).map(normalizeControlDeviceRow);
+    DIARY = {};
+    (diaryRes.data || []).map(normalizeDiaryRow).forEach(entry => { DIARY[entry.date] = entry; });
+    TASKS = { items: (tasksRes.data || []).map(normalizeTaskRow) };
+
+    renderRecipes?.();
+    renderRecipeSelects?.();
+    renderMaterials?.();
+    syncMaterialNamesDatalist?.();
+    renderBatches?.();
+    renderCubes?.();
+    renderAir?.();
+    renderCustomers?.();
+    renderCustomerSelects?.();
+    renderOrders?.();
+    renderControlDevices?.();
+    renderDiaryInit?.();
+    renderTasks?.();
+    renderDashboard?.();
+    try { window.renderDemouldingHistory?.(); } catch(_) {}
+    try {
+      if (document.getElementById('tab-avformningskuber')?.style.display !== 'none') {
+        // Avformningslistan använder BATCHES, så rendera om fliken efter fabriksdata.
+        const btn = document.querySelector('[data-tab="avformningskuber"][aria-current="page"]');
+        if (btn) window.setTab?.('avformningskuber');
+      }
+    } catch(_) {}
+    try { updateCloudDashboardMeta?.(); } catch(_) {}
+  }
+
+  async function loadFactoryCoreData(opts){
+    const sbc = sbClient();
+    const u = user();
+    const factoryId = activeFactoryId();
+    if (!sbc || !u || !factoryId || loadingFactoryData) return false;
+
+    loadingFactoryData = true;
+    try{
+      const ids = await getFactoryUserIds(factoryId);
+      if (!ids.length) return false;
+      const key = factoryId + '|' + ids.sort().join(',');
+      if (!opts?.force && key === lastFactoryLoadKey && Array.isArray(RECIPES) && RECIPES.length) return true;
+      lastFactoryLoadKey = key;
+
+      const results = await Promise.all([
+        sbc.from('recipes').select('id,name,strength,vct,vct_eq,air_req,app_data,created_at,user_id').in('user_id', ids).order('created_at', { ascending: true }),
+        sbc.from('materials').select('id,name,type,ef,note,app_data,created_at,user_id').in('user_id', ids).order('created_at', { ascending: true }),
+        sbc.from('batches').select('id,recipe_id,amount_m3,datetime,gwp,app_data,created_at,user_id').in('user_id', ids).order('datetime', { ascending: false }),
+        sbc.from('cubes').select('id,recipe_id,cast_date,due_date,strength_mpa,weight,vct,vct_eq,air,temp,kw,batch_id,note,app_data,created_at,user_id').in('user_id', ids).order('cast_date', { ascending: false }),
+        sbc.from('air').select('id,recipe_id,date,pct,note,app_data,created_at,user_id').in('user_id', ids).order('date', { ascending: false }),
+        sbc.from('customers').select('id,name,contact,info,app_data,created_at,user_id').in('user_id', ids).order('created_at', { ascending: true }),
+        sbc.from('orders').select('id,customer_id,recipe_id,order_name,amount_m3,gwp,delivery_date,note,app_data,created_at,user_id').in('user_id', ids).order('delivery_date', { ascending: false }),
+        sbc.from('control_devices').select('id,type,name,serial,checks,app_data,created_at,user_id').in('user_id', ids).order('created_at', { ascending: true }),
+        sbc.from('diary_entries').select('id,entry_date,weather,vct_req,vct_meas,temp_out,temp_cure,temp_lab,air_req_min,air_meas,water_density,note,imports,app_data,created_at,user_id').in('user_id', ids).order('entry_date', { ascending: false }),
+        sbc.from('tasks').select('id,title,freq,log,app_data,created_at,user_id').in('user_id', ids).order('created_at', { ascending: true })
+      ]);
+      applyCoreData(results);
+      return true;
+    }catch(err){
+      console.warn('v19.5.14 kunde inte ladda fabriksdata:', err);
+      try { setCloudStatus?.('warn', 'Fabriksdata kunde inte laddas: ' + (err.message || err)); } catch(_) {}
+      return false;
+    }finally{
+      loadingFactoryData = false;
+    }
+  }
+
+  function patchCoreLoader(){
+    const oldLoad = window.loadCloudCoreData || (typeof loadCloudCoreData === 'function' ? loadCloudCoreData : null);
+    if (typeof oldLoad === 'function' && !oldLoad.__btgV19514Wrapped){
+      const wrapped = async function(){
+        const res = await oldLoad.apply(this, arguments);
+        await loadFactoryCoreData({ force:true });
+        return res;
+      };
+      wrapped.__btgV19514Wrapped = true;
+      window.loadCloudCoreData = loadCloudCoreData = wrapped;
+    }
+  }
+
+  function bindFactorySelector(){
+    document.addEventListener('change', function(e){
+      if (e.target && e.target.id === 'btgFactorySelector') {
+        lastFactoryLoadKey = '';
+        setTimeout(() => loadFactoryCoreData({ force:true }), 50);
+      }
+    }, true);
+  }
+
+  function init(){
+    patchCoreLoader();
+    bindFactorySelector();
+    setTimeout(() => loadFactoryCoreData({ force:true }), 800);
+    setTimeout(() => loadFactoryCoreData({ force:true }), 2000);
+    try { window.sb?.auth?.onAuthStateChange?.(() => setTimeout(() => loadFactoryCoreData({ force:true }), 900)); } catch(_) {}
+  }
+
+  window.btgLoadFactoryCoreData = loadFactoryCoreData;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+
+
+<!-- =====================================================
+     v19.5.15 AVFORMNINGSKUBER – factory data render fix
+     Säker, isolerad patch: ersätter bara rendering/laddning för Avformningskuber.
+     ===================================================== -->
+<script id="btg-v19-5-15-demoulding-factory-render-fix">
+(function(){
+  if (window.__BTG_V19515_DEMOULDING_FACTORY_RENDER_FIX) return;
+  window.__BTG_V19515_DEMOULDING_FACTORY_RENDER_FIX = true;
+
+  let cachedFactoryBatches = [];
+  let cachedHistory = [];
+  let loading = false;
+  let lastError = '';
+
+  function sbc(){ try { return window.sb || sb || null; } catch(_) { return window.sb || null; } }
+  function user(){ try { return window.CURRENT_USER || CURRENT_USER || null; } catch(_) { return window.CURRENT_USER || null; } }
+  function activeFactoryId(){
+    try {
+      return window.BTG_FACTORY_ADMIN_STATE?.selectedFactoryId
+        || window.BTG_ACCESS_STATE?.profile?.factory_id
+        || window.BTG_ACCESS_STATE?.factory?.id
+        || window.BTG_ACCESS_STATE?.factory?.factory_id
+        || null;
+    } catch(_) { return null; }
+  }
+  function esc(v){
+    if (typeof escapeHtml === 'function') return escapeHtml(v);
+    return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function localISO(v){
+    const d = v ? new Date(v) : new Date();
+    if (Number.isNaN(d.getTime())) return '';
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0,10);
+  }
+  function fmtDateTime(v){ try { return v ? new Date(v).toLocaleString('sv-SE', { dateStyle:'short', timeStyle:'short' }) : '—'; } catch(_) { return v || '—'; } }
+  function fmtDateOnly(v){ try { return v ? new Date(v).toLocaleDateString('sv-SE') : '—'; } catch(_) { return v || '—'; } }
+  function numberText(v, decimals){ const n = Number(v); return Number.isFinite(n) ? n.toFixed(decimals) : '—'; }
+  function selectedDate(){
+    const el = document.getElementById('demouldingCastDate');
+    if (el?.value) return el.value;
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    const iso = localISO(d);
+    if (el) el.value = iso;
+    return iso;
+  }
+  function uniqById(rows){
+    const seen = new Set();
+    const out = [];
+    (rows || []).forEach(r => {
+      const key = String(r.cloudId || r.id || r.app_data?.id || JSON.stringify([r.dateTime,r.recipeName,r.batchId]));
+      if (!seen.has(key)){ seen.add(key); out.push(r); }
+    });
+    return out;
+  }
+  function normalizeBatch(row){
+    try { if (typeof normalizeBatchRow === 'function' && row && row.app_data !== undefined) return normalizeBatchRow(row); } catch(_) {}
+    const app = row?.app_data || row || {};
+    return {
+      ...app,
+      id: row?.id || app.id,
+      cloudId: row?.id || app.cloudId || app.id,
+      recipeId: app.recipeId || row?.recipe_id || '',
+      recipeCloudId: row?.recipe_id || app.recipeCloudId || null,
+      recipeName: app.recipeName || app.recipe_name || '',
+      strength: app.strength || '',
+      amount: app.amount ?? row?.amount_m3 ?? 0,
+      dateTime: app.dateTime || row?.datetime || app.datetime || row?.created_at || new Date().toISOString(),
+      source: app.source || '',
+      productionType: app.productionType || app.production_type || '',
+      customerId: app.customerId || app.customer_id || null,
+      customerName: app.customerName || app.customer_name || '',
+      prefabRequestId: app.prefabRequestId || app.prefab_request_id || null,
+      prefabFactoryId: app.prefabFactoryId || app.factory_id || null,
+      tableNo: app.tableNo || app.table_no || '',
+      drawingNo: app.drawingNo || app.drawing_no || '',
+      createdAt: row?.created_at || app.createdAt || new Date().toISOString()
+    };
+  }
+  function productionType(b){
+    const app = b?.app_data || {};
+    return b?.productionType || b?.production_type || app.productionType || app.production_type || (b?.source === 'customer_order' || app.source === 'customer_order' ? 'order' : (b?.source === 'prefab_queue' || app.source === 'prefab_queue' ? 'prefab' : ''));
+  }
+  function isPrefabBatch(b){
+    const app = b?.app_data || {};
+    const pt = String(productionType(b) || '').toLowerCase();
+    return pt === 'prefab'
+      || b?.source === 'prefab_queue'
+      || app.source === 'prefab_queue'
+      || !!(b?.prefabRequestId || app.prefabRequestId || app.prefab_request_id)
+      || !!(b?.prefabFactoryId || app.prefabFactoryId || app.factory_id)
+      || !!(b?.tableNo || app.tableNo || app.table_no || b?.drawingNo || app.drawingNo || app.drawing_no);
+  }
+  function batchDate(b){ return localISO(b?.dateTime || b?.datetime || b?.createdAt || b?.created_at); }
+  function batchCloudId(b){ return String(b?.cloudId || b?.id || b?.app_data?.cloudId || b?.app_data?.id || ''); }
+  function batchHumanId(b){ const app = b?.app_data || {}; return b?.batchId || app.batchId || app.batch_id || app.satsId || b?.id || ''; }
+  function findRecipeName(b){
+    if (b?.recipeName) return b.recipeName;
+    const rid = b?.recipeCloudId || b?.recipeId;
+    const rec = (Array.isArray(RECIPES) ? RECIPES : []).find(r => String(r.cloudId || r.id) === String(rid) || String(r.id) === String(rid));
+    return rec?.name || '—';
+  }
+  function findStrength(b){
+    if (b?.strength) return b.strength;
+    const rid = b?.recipeCloudId || b?.recipeId;
+    const rec = (Array.isArray(RECIPES) ? RECIPES : []).find(r => String(r.cloudId || r.id) === String(rid) || String(r.id) === String(rid));
+    return rec?.strength || '';
+  }
+  async function factoryUserIds(){
+    const db = sbc();
+    const fid = activeFactoryId();
+    if (!db || !fid) return user()?.id ? [user().id] : [];
+    try{
+      const { data, error } = await db.rpc('btg_factory_user_ids', { p_factory_id: fid });
+      if (error) throw error;
+      const ids = Array.from(new Set((data || []).map(r => String(r.user_id || r.uid || r)).filter(Boolean)));
+      return ids.length ? ids : (user()?.id ? [user().id] : []);
+    }catch(err){
+      console.warn('Avformning: kunde inte läsa factory user ids:', err);
+      return user()?.id ? [user().id] : [];
+    }
+  }
+  async function loadFactoryBatches(){
+    const db = sbc();
+    if (!db || !user()) return [];
+    const ids = await factoryUserIds();
+    if (!ids.length) return [];
+    try{
+      const { data, error } = await db
+        .from('batches')
+        .select('id,recipe_id,amount_m3,datetime,gwp,app_data,created_at,user_id')
+        .in('user_id', ids)
+        .order('datetime', { ascending:false })
+        .limit(800);
+      if (error) throw error;
+      cachedFactoryBatches = (data || []).map(normalizeBatch);
+    }catch(err){
+      lastError = err?.message || String(err || 'Kunde inte läsa satser');
+      console.warn('Avformning: kunde inte läsa batches direkt:', err);
+      cachedFactoryBatches = [];
+    }
+    const globalBatches = Array.isArray(BATCHES) ? BATCHES : [];
+    return uniqById([ ...globalBatches, ...cachedFactoryBatches ]);
+  }
+  async function loadHistory(){
+    const db = sbc();
+    if (!db || !user()) { cachedHistory = []; return []; }
+    const ids = await factoryUserIds();
+    try{
+      let q = db.from('demoulding_cubes')
+        .select('id,user_id,batch_cloud_id,batch_id,batch_datetime,cast_date,demould_date,recipe_id,recipe_name,strength,production_type,customer_id,customer_name,prefab_request_id,factory_id,amount_m3,mpa,press_time,employee_no,comment,app_data,created_at,updated_at')
+        .order('demould_date', { ascending:false })
+        .order('created_at', { ascending:false });
+      q = ids.length ? q.in('user_id', ids) : q.eq('user_id', user().id);
+      const { data, error } = await q;
+      if (error) throw error;
+      cachedHistory = (data || []).map(r => ({
+        id: r.id,
+        batchCloudId: r.batch_cloud_id || r.app_data?.batchCloudId || '',
+        batchId: r.batch_id || r.app_data?.batchId || '',
+        batchDateTime: r.batch_datetime || r.app_data?.batchDateTime || '',
+        castDate: r.cast_date || r.app_data?.castDate || '',
+        demouldDate: r.demould_date || r.app_data?.demouldDate || '',
+        recipeName: r.recipe_name || r.app_data?.recipeName || '',
+        strength: r.strength || r.app_data?.strength || '',
+        customerName: r.customer_name || r.app_data?.customerName || '',
+        amount: r.amount_m3 ?? r.app_data?.amount ?? null,
+        mpa: r.mpa ?? r.app_data?.mpa ?? null,
+        pressTime: r.press_time || r.app_data?.pressTime || '',
+        employeeNo: r.employee_no || r.app_data?.employeeNo || '',
+        comment: r.comment || r.app_data?.comment || '',
+        createdAt: r.created_at || ''
+      }));
+    }catch(err){
+      lastError = err?.message || String(err || 'Kunde inte läsa avformningshistorik');
+      console.warn('Avformning: kunde inte läsa historik:', err);
+      cachedHistory = [];
+    }
+    return cachedHistory;
+  }
+  function historyForBatch(b){
+    const id = batchCloudId(b);
+    return cachedHistory.find(h => id && String(h.batchCloudId) === id) || null;
+  }
+  function candidatesForSelectedDate(all){
+    const date = selectedDate();
+    return (all || [])
+      .filter(isPrefabBatch)
+      .filter(b => batchDate(b) === date)
+      .sort((a,b) => String(a.dateTime || '').localeCompare(String(b.dateTime || '')));
+  }
+  function knownPrefabDates(all){
+    return Array.from(new Set((all || []).filter(isPrefabBatch).map(batchDate).filter(Boolean))).sort().reverse().slice(0,10);
+  }
+  function setStatus(allRows, rows){
+    const el = document.getElementById('demouldingCloudStatus');
+    const label = document.getElementById('demouldingTargetDateLabel');
+    if (label) label.textContent = 'Gjutdatum: ' + fmtDateOnly(selectedDate());
+    if (!el) return;
+    const totalPrefab = (allRows || []).filter(isPrefabBatch).length;
+    const fid = activeFactoryId();
+    el.textContent = `Aktiv fabrik: ${fid ? 'vald' : 'saknas'} • prefab-satser: ${totalPrefab} • valt datum: ${rows.length}` + (lastError ? ` • ${lastError}` : '');
+  }
+  async function saveDemoulding(batch, rowEl){
+    const db = sbc();
+    const u = user();
+    if (!db || !u){ alert('Supabase inte tillgänglig eller användare saknas. Ladda om appen.'); return; }
+    const box = rowEl?.querySelector('.demoulding-input-row');
+    const mpa = Number(String(box?.querySelector('[data-field="mpa"]')?.value || '').replace(',', '.'));
+    const pressTime = (box?.querySelector('[data-field="pressTime"]')?.value || '').trim();
+    const employeeNo = (box?.querySelector('[data-field="employeeNo"]')?.value || '').trim();
+    const comment = (box?.querySelector('[data-field="comment"]')?.value || '').trim();
+    if (!Number.isFinite(mpa) || mpa <= 0){ alert('Fyll i MPa med ett värde större än 0.'); return; }
+    if (!pressTime){ alert('Fyll i trycktid.'); return; }
+    if (!employeeNo){ alert('Fyll i anställningsnummer.'); return; }
+    const recName = findRecipeName(batch);
+    const strength = findStrength(batch);
+    const app = {
+      batchCloudId: batchCloudId(batch),
+      batchId: batchHumanId(batch),
+      batchDateTime: batch.dateTime || batch.datetime || '',
+      castDate: batchDate(batch),
+      demouldDate: localISO(),
+      recipeId: batch.recipeCloudId || batch.recipeId || null,
+      recipeName: recName === '—' ? '' : recName,
+      strength,
+      productionType: 'prefab',
+      customerId: batch.customerId || batch.app_data?.customerId || null,
+      customerName: batch.customerName || batch.app_data?.customerName || batch.app_data?.customer_name || '',
+      prefabRequestId: batch.prefabRequestId || batch.app_data?.prefabRequestId || batch.app_data?.prefab_request_id || null,
+      factoryId: batch.prefabFactoryId || batch.app_data?.prefabFactoryId || batch.app_data?.factory_id || activeFactoryId(),
+      amount: batch.amount ?? null,
+      mpa,
+      pressTime,
+      employeeNo,
+      comment,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    const payload = {
+      user_id: u.id,
+      batch_cloud_id: app.batchCloudId || null,
+      batch_id: app.batchId || null,
+      batch_datetime: app.batchDateTime || null,
+      cast_date: app.castDate || selectedDate(),
+      demould_date: app.demouldDate,
+      recipe_id: app.recipeId || null,
+      recipe_name: app.recipeName || null,
+      strength: app.strength || null,
+      production_type: 'prefab',
+      customer_id: app.customerId || null,
+      customer_name: app.customerName || null,
+      prefab_request_id: app.prefabRequestId || null,
+      factory_id: app.factoryId || null,
+      amount_m3: Number(app.amount) || null,
+      mpa,
+      press_time: pressTime,
+      employee_no: employeeNo,
+      comment: comment || null,
+      app_data: app
+    };
+    const { error } = await db.from('demoulding_cubes').insert([payload]);
+    if (error){ alert('Kunde inte spara avformningskub: ' + (error.message || error)); return; }
+    await window.btgRefreshDemouldingV19515();
+  }
+  async function render(){
+    const tbody = document.querySelector('#demouldingTodayTable tbody');
+    if (!tbody) return;
+    if (loading) return;
+    loading = true;
+    lastError = '';
+    try{
+      const [all] = await Promise.all([loadFactoryBatches(), loadHistory()]);
+      const rows = candidatesForSelectedDate(all);
+      setStatus(all, rows);
+      if (!user()){
+        tbody.innerHTML = '<tr><td colspan="8"><span class="pill warn">Logga in för att arbeta med avformningskuber.</span></td></tr>';
+        return;
+      }
+      if (!rows.length){
+        const dates = knownPrefabDates(all);
+        tbody.innerHTML = `<tr><td colspan="8">Inga prefabgjutningar hittades för valt gjutdatum. ${dates.length ? 'Datum med prefab-satser: ' + dates.map(d => `<button class="btn secondary" type="button" data-demould-date="${esc(d)}" style="margin:.15rem">${esc(fmtDateOnly(d))}</button>`).join(' ') : 'Inga prefab-satser hittades i aktiv fabrik.'}</td></tr>`;
+        tbody.querySelectorAll('[data-demould-date]').forEach(btn => btn.addEventListener('click', () => {
+          const input = document.getElementById('demouldingCastDate');
+          if (input) input.value = btn.getAttribute('data-demould-date') || '';
+          window.btgRefreshDemouldingV19515();
+        }));
+        return;
+      }
+      tbody.innerHTML = rows.map((b, idx) => {
+        const done = historyForBatch(b);
+        const recName = findRecipeName(b);
+        const strength = findStrength(b);
+        const customer = b.customerName || b.app_data?.customerName || b.app_data?.customer_name || '—';
+        return `<tr${done ? ' class="demoulding-done-row"' : ''}>
+          <td>${esc(fmtDateTime(b.dateTime))}<span class="demoulding-small">${esc(b.tableNo || b.app_data?.tableNo || b.app_data?.table_no || '')}</span></td>
+          <td>${esc(batchHumanId(b) || '—')}</td>
+          <td>${esc(recName)}<span class="demoulding-small">${esc(strength || '')}</span></td>
+          <td>Prefab</td>
+          <td>${esc(customer)}</td>
+          <td>${numberText(b.amount, 2)} m³</td>
+          <td>${done ? `<span class="pill ok">Sparad ${esc(fmtDateOnly(done.demouldDate))}</span><span class="demoulding-small">${numberText(done.mpa,1)} MPa • ${esc(done.employeeNo)}</span>` : `
+            <div class="demoulding-input-row">
+              <div><label>MPa</label><input type="number" step="0.1" min="0" data-field="mpa"></div>
+              <div><label>Trycktid</label><input type="text" data-field="pressTime" placeholder="t.ex. 08:15"></div>
+              <div><label>Anst.nr</label><input type="text" data-field="employeeNo" placeholder="t.ex. 1234"></div>
+              <div><label>Kommentar</label><input type="text" data-field="comment" placeholder="valfritt"></div>
+              <button class="btn" type="button" data-v19515-save="${idx}">Klar</button>
+            </div>`}</td>
+          <td>${done ? '<span class="pill ok">Klar</span>' : '<span class="pill warn">Ej klar</span>'}</td>
+        </tr>`;
+      }).join('');
+      tbody.querySelectorAll('[data-v19515-save]').forEach(btn => btn.addEventListener('click', () => {
+        const b = rows[Number(btn.getAttribute('data-v19515-save'))];
+        saveDemoulding(b, btn.closest('tr'));
+      }));
+    } finally {
+      loading = false;
+    }
+  }
+  function patchTab(){
+    const oldSetTab = window.setTab || (typeof setTab === 'function' ? setTab : null);
+    if (typeof oldSetTab === 'function' && !oldSetTab.__btgV19515DemouldWrapped){
+      const wrapped = async function(name){
+        const res = await oldSetTab.apply(this, arguments);
+        if (name === 'avformningskuber') {
+          setTimeout(render, 80);
+          setTimeout(render, 500);
+        }
+        return res;
+      };
+      wrapped.__btgV19515DemouldWrapped = true;
+      window.setTab = setTab = wrapped;
+    }
+  }
+  function bind(){
+    document.addEventListener('change', e => {
+      if (e.target?.id === 'demouldingCastDate' || e.target?.id === 'btgFactorySelector') setTimeout(render, 80);
+    }, true);
+    document.addEventListener('click', e => {
+      if (e.target?.id === 'btnRefreshDemoulding') setTimeout(render, 120);
+    }, true);
+  }
+  async function refresh(){ await render(); }
+  window.btgRefreshDemouldingV19515 = refresh;
+  function init(){ patchTab(); bind(); if (document.getElementById('tab-avformningskuber')?.style.display !== 'none') setTimeout(render, 300); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+
+
+
+<!-- =====================================================
+     v19.5.16 – PRODUKTIONSROLL: ENDAST PREFABKÖ + AVFORMNING
+     Isolerad säker patch. Ändrar inte dashboard/layout i övrigt.
+     ===================================================== -->
+<script id="btg-v19-5-16-production-limited-access">
+(function(){
+  if (window.__BTG_V19516_PRODUCTION_LIMITED_PATCHED) return;
+  window.__BTG_V19516_PRODUCTION_LIMITED_PATCHED = true;
+
+  const PROD_ALLOWED = { prefab:true, avformningskuber:true };
+  const PROD_ALLOWED_TABS = new Set(Object.keys(PROD_ALLOWED));
+
+  function roleCode(){
+    try { return String(window.BTG_ACCESS_STATE?.profile?.role_code || '').trim().toUpperCase(); }
+    catch(_) { return ''; }
+  }
+  function isProduction(){ return roleCode() === 'PRODUKTION'; }
+  function sanitizeProductionPermissions(){
+    if (!isProduction()) return false;
+    try {
+      window.BTG_ACCESS_STATE.permissions = Object.assign({}, PROD_ALLOWED);
+      if (window.BTG_ACCESS_STATE.profile) window.BTG_ACCESS_STATE.profile.permissions = Object.assign({}, PROD_ALLOWED);
+    } catch(_) {}
+    return true;
+  }
+  function safeSetTab(tab){
+    const target = PROD_ALLOWED_TABS.has(tab) ? tab : 'prefab';
+    try {
+      if (typeof window.__BTG_ORIGINAL_SET_TAB_V19516 === 'function') return window.__BTG_ORIGINAL_SET_TAB_V19516(target);
+      if (typeof setTab === 'function') return setTab(target);
+    } catch(_) {}
+    try {
+      document.querySelectorAll('main > section[id^="tab-"]').forEach(sec => {
+        sec.style.display = (sec.id === 'tab-' + target) ? 'grid' : 'none';
+      });
+      document.querySelectorAll('.tab-btn[data-tab], .main-nav [data-tab]').forEach(btn => {
+        btn.setAttribute('aria-current', btn.dataset.tab === target ? 'page' : 'false');
+      });
+    } catch(_) {}
+  }
+  function applyProductionUi(){
+    if (!sanitizeProductionPermissions()) return;
+    try {
+      document.querySelectorAll('.tab-btn[data-tab], .main-nav [data-tab]').forEach(btn => {
+        const tab = btn.dataset?.tab;
+        if (!tab) return;
+        btn.style.display = PROD_ALLOWED_TABS.has(tab) ? '' : 'none';
+      });
+      document.querySelectorAll('[data-nav]').forEach(btn => {
+        const tab = btn.getAttribute('data-nav');
+        if (tab && !PROD_ALLOWED_TABS.has(tab)) btn.style.display = 'none';
+      });
+      ['btnSettings','btnNordcert','btnExportAll','btnImportAll','btnFactoryAdmin','btnOpenFactoryAdmin','btnCreateFactoryOpen','btnOpenCreateFactory','btnAccessFactoryAdmin'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+      const current = document.querySelector('.tab-btn[aria-current="page"]')?.dataset?.tab || '';
+      if (!PROD_ALLOWED_TABS.has(current)) safeSetTab('prefab');
+      const badge = document.getElementById('btgAccessBadge') || document.getElementById('roleAccessBadge');
+      if (badge) {
+        badge.textContent = 'Roll: PRODUKTION • Prefabkö + Avformning';
+        badge.title = 'Produktionsrollen har endast åtkomst till Prefabkö och Avformningskuber.';
+      }
+    } catch(_) {}
+  }
+
+  try {
+    if (typeof window.setTab === 'function' && !window.__BTG_ORIGINAL_SET_TAB_V19516) {
+      window.__BTG_ORIGINAL_SET_TAB_V19516 = window.setTab;
+      window.setTab = function(tab){
+        sanitizeProductionPermissions();
+        if (isProduction() && !PROD_ALLOWED_TABS.has(tab)) tab = 'prefab';
+        const result = window.__BTG_ORIGINAL_SET_TAB_V19516.apply(this, [tab]);
+        setTimeout(applyProductionUi, 0);
+        return result;
+      };
+    }
+  } catch(_) {}
+
+  try {
+    if (typeof window.loadAccessProfile === 'function' && !window.__BTG_ORIGINAL_LOAD_ACCESS_PROFILE_V19516) {
+      window.__BTG_ORIGINAL_LOAD_ACCESS_PROFILE_V19516 = window.loadAccessProfile;
+      window.loadAccessProfile = async function(){
+        const result = await window.__BTG_ORIGINAL_LOAD_ACCESS_PROFILE_V19516.apply(this, arguments);
+        sanitizeProductionPermissions();
+        setTimeout(applyProductionUi, 0);
+        return result;
+      };
+    }
+  } catch(_) {}
+
+  document.addEventListener('click', function(ev){
+    try {
+      if (!isProduction()) return;
+      const nav = ev.target.closest('[data-tab], [data-nav]');
+      if (!nav) return;
+      const tab = nav.dataset?.tab || nav.getAttribute('data-nav');
+      if (tab && !PROD_ALLOWED_TABS.has(tab)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        safeSetTab('prefab');
+      }
+    } catch(_) {}
+  }, true);
+
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(applyProductionUi, 250); });
+  setTimeout(applyProductionUi, 600);
+  setTimeout(applyProductionUi, 1600);
+})();
+</script>
+
+
+
+<!-- =====================================================
+     v19.5.17b – SAFE MULTI-PROFILE ACTIVATION FIX
+     Säker insättning längst ned i body. Ingen text i dashboard/PDF-template.
+     - aktiverar behörighetskod utan gammal maybeSingle-läsning
+     - läser flera fabriksprofiler per konto
+     - väljer aktiv fabrik/profil stabilt
+     ===================================================== -->
+<script id="btg-v19-5-17b-multi-profile-safe-fix">
+(function(){
+  if (window.__BTG_V19517B_MULTI_PROFILE_SAFE_FIX) return;
+  window.__BTG_V19517B_MULTI_PROFILE_SAFE_FIX = true;
+
+  const ACCESS_TABLE = 'btg_user_access_profiles';
+  const ACCESS_RPC = 'redeem_btg_access_code';
+  const PROD_ALLOWED = { prefab:true, avformningskuber:true };
+  const ROLE_PRESETS = {
+    ADMIN:{dashboard:true,tillverkning:true,bestallningar:true,provningar:true,utvardering:true,kontroll:true,material:true,dagbok:true,prefab:true,avformningskuber:true,settings:true,nordcert:true,exports:true,imports:true,role_admin:true},
+    SUPERADMIN:{dashboard:true,tillverkning:true,bestallningar:true,provningar:true,utvardering:true,kontroll:true,material:true,dagbok:true,prefab:true,avformningskuber:true,settings:true,nordcert:true,exports:true,imports:true,role_admin:true},
+    KONTOR:{dashboard:true,tillverkning:true,bestallningar:true,material:true,utvardering:true,provningar:true,nordcert:true,exports:true},
+    PRODUKTION:Object.assign({}, PROD_ALLOWED),
+    LABB:{dashboard:true,provningar:true,avformningskuber:true,utvardering:true,material:true,exports:true},
+    KVALITET:{dashboard:true,tillverkning:true,bestallningar:true,provningar:true,utvardering:true,kontroll:true,material:true,dagbok:true,avformningskuber:true,nordcert:true,exports:true},
+    PREFAB:{prefab:true},
+    LASARE:{dashboard:true,tillverkning:true,bestallningar:true,provningar:true,utvardering:true,material:true,exports:true},
+    'LÄSARE':{dashboard:true,tillverkning:true,bestallningar:true,provningar:true,utvardering:true,material:true,exports:true}
+  };
+
+  function sbc(){ try { return window.sb || sb || null; } catch(_) { return window.sb || null; } }
+  function currentUser(){ try { return window.CURRENT_USER || CURRENT_USER || null; } catch(_) { return window.CURRENT_USER || null; } }
+  function norm(v){ return String(v || '').trim().toUpperCase(); }
+  function permsFor(profile){
+    const role = norm(profile && (profile.role_code || profile.role));
+    const base = Object.assign({}, ROLE_PRESETS[role] || {});
+    const extra = (profile && profile.permissions && typeof profile.permissions === 'object') ? profile.permissions : {};
+    const merged = Object.assign(base, extra);
+    if (role === 'PRODUKTION') return Object.assign({}, PROD_ALLOWED);
+    return merged;
+  }
+  function selectedFactoryId(){
+    try { if (window.BTG_FACTORY_ADMIN_STATE && window.BTG_FACTORY_ADMIN_STATE.selectedFactoryId) return String(window.BTG_FACTORY_ADMIN_STATE.selectedFactoryId); } catch(_) {}
+    try { const v = localStorage.getItem('btg_selected_factory_id'); if (v) return String(v); } catch(_) {}
+    try { if (window.BTG_ACCESS_STATE && window.BTG_ACCESS_STATE.profile && window.BTG_ACCESS_STATE.profile.factory_id) return String(window.BTG_ACCESS_STATE.profile.factory_id); } catch(_) {}
+    return '';
+  }
+  function chooseProfile(profiles){
+    profiles = Array.isArray(profiles) ? profiles : [];
+    const fid = selectedFactoryId();
+    if (fid) {
+      const exact = profiles.find(p => String(p.factory_id || '') === fid);
+      if (exact) return exact;
+    }
+    return profiles[0] || null;
+  }
+  async function fetchFactory(factoryId){
+    const c = sbc();
+    if (!c || !factoryId) return null;
+    try {
+      const { data, error } = await c.from('factories').select('id,name,factory_code,join_code,active,created_at').eq('id', factoryId).limit(1);
+      if (error) throw error;
+      return (data && data[0]) || null;
+    } catch(e) { console.warn('v19.5.17b kunde inte läsa fabrik:', e); return null; }
+  }
+  function setBadge(st){
+    const badge = document.getElementById('btgAccessBadge') || document.getElementById('roleAccessBadge');
+    if (!badge) return;
+    const u = currentUser();
+    if (!u) badge.textContent = 'Behörighet: ej inloggad';
+    else if (!st || !st.loaded) badge.textContent = 'Behörighet: laddar…';
+    else if (st.error) badge.textContent = 'Behörighet: SQL/åtkomstfel';
+    else if (!st.profile) badge.textContent = 'Behörighetskod krävs';
+    else {
+      const role = norm(st.profile.role_code || st.profile.role) || '—';
+      const factory = st.factory && (st.factory.name || st.factory.factory_name) ? ' • ' + (st.factory.name || st.factory.factory_name) : '';
+      badge.textContent = 'Roll: ' + role + factory;
+    }
+    try { badge.title = badge.textContent || ''; } catch(_) {}
+  }
+  function firstAllowed(perms){
+    return ['dashboard','prefab','avformningskuber','tillverkning','bestallningar','provningar','utvardering','kontroll','material','dagbok'].find(t => perms && perms[t]) || 'dashboard';
+  }
+  function applySimpleAccessUi(){
+    const st = window.BTG_ACCESS_STATE || {};
+    setBadge(st);
+    const user = currentUser();
+    const locked = !!user && st.loaded && !st.profile;
+    document.body.classList.toggle('btg-access-locked', locked);
+    document.body.classList.remove('role-requester');
+    if (user && st.loaded && st.profile) {
+      const perms = st.permissions || {};
+      document.querySelectorAll('.main-nav [data-tab], nav.toolbar [data-tab], .tab-btn[data-tab]').forEach(btn => {
+        const tab = btn.dataset && btn.dataset.tab;
+        if (tab) btn.style.display = perms[tab] ? '' : 'none';
+      });
+      const role = norm(st.profile.role_code || st.profile.role);
+      if (role === 'PRODUKTION') {
+        ['btnSettings','btnNordcert','btnExportAll','btnImportAll','btnFactoryAdmin','btnOpenFactoryAdmin'].forEach(id => { const el=document.getElementById(id); if(el) el.style.display='none'; });
+      }
+      const current = document.querySelector('.tab-btn[aria-current="page"]')?.dataset?.tab;
+      if (current && !perms[current]) {
+        const target = firstAllowed(perms);
+        setTimeout(()=>{ try { window.setTab(target); } catch(_) {} }, 0);
+      }
+    }
+  }
+
+  async function safeLoadAccessState(){
+    const u = currentUser();
+    window.BTG_ACCESS_STATE = window.BTG_ACCESS_STATE || { loaded:false, profile:null, factory:null, permissions:null, error:null };
+    if (!u || !sbc()) {
+      window.BTG_ACCESS_STATE = { loaded:!!(!u), profile:null, factory:null, permissions:null, error:null };
+      applySimpleAccessUi();
+      return window.BTG_ACCESS_STATE;
+    }
+    try {
+      const { data, error } = await sbc()
+        .from(ACCESS_TABLE)
+        .select('id,user_id,factory_id,role_code,permissions,activated_at,updated_at')
+        .eq('user_id', u.id)
+        .order('updated_at', { ascending:false, nullsFirst:false });
+      if (error) throw error;
+      const profiles = Array.isArray(data) ? data : [];
+      const profile = chooseProfile(profiles);
+      const factory = profile && profile.factory_id ? await fetchFactory(profile.factory_id) : null;
+      const permissions = permsFor(profile);
+      window.BTG_ACCESS_STATE = { loaded:true, profile:profile || null, factory:factory ? { id:factory.id, name:factory.name, factory_code:factory.factory_code || factory.join_code || '' } : null, permissions, error:null };
+      window.BTG_ROLE_STATE = { loaded:true, role: profile ? norm(profile.role_code) : null, factory:window.BTG_ACCESS_STATE.factory, member: profile ? { factory_id: profile.factory_id, role:norm(profile.role_code) } : null };
+      if (profile && profile.factory_id) {
+        try { localStorage.setItem('btg_selected_factory_id', String(profile.factory_id)); } catch(_) {}
+        try { if (window.BTG_FACTORY_ADMIN_STATE) window.BTG_FACTORY_ADMIN_STATE.selectedFactoryId = String(profile.factory_id); } catch(_) {}
+      }
+    } catch(e) {
+      console.warn('v19.5.17b behörighetsladdning misslyckades:', e);
+      window.BTG_ACCESS_STATE = { loaded:true, profile:null, factory:null, permissions:null, error:e };
+    }
+    applySimpleAccessUi();
+    try { if (typeof window.applyAccessState === 'function') window.applyAccessState(); } catch(_) {}
+    return window.BTG_ACCESS_STATE;
+  }
+
+  function setMsg(text, kind){
+    const el = document.getElementById('btgAccessMessage');
+    if (!el) return;
+    el.className = 'pill ' + (kind || '');
+    el.textContent = text;
+  }
+  function closeDlg(){
+    const d = document.getElementById('btgAccessDialog');
+    try { if (d && d.open) d.close(); } catch(_) { try { d && d.removeAttribute('open'); } catch(__) {} }
+  }
+  async function safeRedeemAccessCode(ev){
+    if (ev) { ev.preventDefault(); ev.stopPropagation(); if (ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
+    const c = sbc();
+    const input = document.getElementById('btgAccessCodeInput');
+    const code = String(input && input.value || '').trim().toUpperCase();
+    if (!code) { setMsg('Ange behörighetskod.', 'warn'); return false; }
+    if (!currentUser()) { setMsg('Du måste vara inloggad först.', 'warn'); return false; }
+    if (!c) { setMsg('Supabase är inte tillgängligt. Ladda om appen.', 'danger'); return false; }
+    const btn = document.getElementById('btnRedeemBtgAccessCode');
+    const old = btn && btn.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Aktiverar…'; }
+    setMsg('Kontrollerar kod…', '');
+    try {
+      const { error } = await c.rpc(ACCESS_RPC, { p_code: code });
+      if (error) throw error;
+      if (input) input.value = '';
+      await safeLoadAccessState();
+      setMsg('Åtkomst aktiverad.', 'ok');
+      closeDlg();
+      const st = window.BTG_ACCESS_STATE || {};
+      const target = firstAllowed(st.permissions || {});
+      setTimeout(()=>{ try { window.setTab(target); } catch(_) {} }, 80);
+    } catch(e) {
+      setMsg(e && e.message ? e.message : String(e || 'Okänt fel'), 'danger');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = old || 'Aktivera åtkomst'; }
+    }
+    return false;
+  }
+
+  function bindRedeemCapture(){
+    const btn = document.getElementById('btnRedeemBtgAccessCode');
+    if (btn && !btn.__btgV19517bBound) {
+      btn.__btgV19517bBound = true;
+      btn.addEventListener('click', safeRedeemAccessCode, true);
+    }
+    const input = document.getElementById('btgAccessCodeInput');
+    if (input && !input.__btgV19517bBound) {
+      input.__btgV19517bBound = true;
+      input.addEventListener('keydown', function(e){ if (e.key === 'Enter') safeRedeemAccessCode(e); }, true);
+    }
+  }
+
+  function init(){
+    window.loadAccessState = safeLoadAccessState;
+    bindRedeemCapture();
+    safeLoadAccessState();
+    setTimeout(safeLoadAccessState, 700);
+    setTimeout(safeLoadAccessState, 1800);
+    try { sbc()?.auth?.onAuthStateChange?.(()=>setTimeout(safeLoadAccessState, 450)); } catch(_) {}
+  }
+
+  window.BTG_SAFE_LOAD_ACCESS_STATE_V19517B = safeLoadAccessState;
+  window.BTG_SAFE_REDEEM_ACCESS_CODE_V19517B = safeRedeemAccessCode;
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+
+
+
+<!-- =====================================================
+     v19.5.18 – KONTORSROLL: ENDAST TILLVERKNINGSDATA + BESTÄLLNINGAR
+     Isolerad säker patch. Ingen SQL/data skrivs här.
+     ===================================================== -->
+<script id="btg-v19-5-18-kontor-limited-access">
+(function(){
+  if (window.__BTG_V19518_KONTOR_LIMITED_PATCHED) return;
+  window.__BTG_V19518_KONTOR_LIMITED_PATCHED = true;
+
+  const KONTOR_ALLOWED = { tillverkning:true, bestallningar:true };
+  const KONTOR_TABS = new Set(Object.keys(KONTOR_ALLOWED));
+
+  function roleCode(){
+    try { return String(window.BTG_ACCESS_STATE?.profile?.role_code || window.BTG_ACCESS_STATE?.profile?.role || '').trim().toUpperCase(); }
+    catch(_) { return ''; }
+  }
+  function isKontor(){ return roleCode() === 'KONTOR'; }
+  function sanitizeKontorPermissions(){
+    if (!isKontor()) return false;
+    try {
+      window.BTG_ACCESS_STATE.permissions = Object.assign({}, KONTOR_ALLOWED);
+      if (window.BTG_ACCESS_STATE.profile) window.BTG_ACCESS_STATE.profile.permissions = Object.assign({}, KONTOR_ALLOWED);
+    } catch(_) {}
+    return true;
+  }
+  function originalSetTab(){
+    return window.__BTG_ORIGINAL_SET_TAB_V19518 || window.__BTG_ORIGINAL_SET_TAB_V19516 || window.__BTG_ORIGINAL_SET_TAB_V1955 || window.setTab;
+  }
+  function safeSetTab(tab){
+    const target = KONTOR_TABS.has(tab) ? tab : 'tillverkning';
+    try {
+      const fn = originalSetTab();
+      if (typeof fn === 'function' && fn !== safeSetTab) return fn.call(window, target);
+    } catch(_) {}
+    try {
+      document.querySelectorAll('main > section[id^="tab-"]').forEach(sec => {
+        sec.style.display = (sec.id === 'tab-' + target) ? 'grid' : 'none';
+      });
+      document.querySelectorAll('.tab-btn[data-tab], .main-nav [data-tab]').forEach(btn => {
+        btn.setAttribute('aria-current', btn.dataset.tab === target ? 'page' : 'false');
+      });
+    } catch(_) {}
+  }
+  function applyKontorUi(){
+    if (!sanitizeKontorPermissions()) return;
+    try {
+      document.querySelectorAll('.tab-btn[data-tab], .main-nav [data-tab]').forEach(btn => {
+        const tab = btn.dataset?.tab;
+        if (!tab) return;
+        btn.style.display = KONTOR_TABS.has(tab) ? '' : 'none';
+      });
+      document.querySelectorAll('[data-nav]').forEach(btn => {
+        const tab = btn.getAttribute('data-nav');
+        if (tab && !KONTOR_TABS.has(tab)) btn.style.display = 'none';
+      });
+      ['btnSettings','btnNordcert','btnExportAll','btnImportAll','btnFactoryAdmin','btnOpenFactoryAdmin','btnCreateFactoryOpen','btnOpenCreateFactory','btnAccessFactoryAdmin','btnAddTask','btnExportTasksPDF'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+      const current = document.querySelector('.tab-btn[aria-current="page"]')?.dataset?.tab || '';
+      if (!KONTOR_TABS.has(current)) safeSetTab('tillverkning');
+      const badge = document.getElementById('btgAccessBadge') || document.getElementById('roleAccessBadge');
+      if (badge) {
+        badge.textContent = 'Roll: KONTOR • Tillverkningsdata + Beställningar';
+        badge.title = 'Kontorsrollen har endast åtkomst till Tillverkningsdata och Beställningar.';
+      }
+    } catch(_) {}
+  }
+
+  try {
+    if (typeof window.setTab === 'function' && !window.__BTG_ORIGINAL_SET_TAB_V19518) {
+      window.__BTG_ORIGINAL_SET_TAB_V19518 = window.setTab;
+      window.setTab = function(tab){
+        sanitizeKontorPermissions();
+        if (isKontor() && !KONTOR_TABS.has(tab)) tab = 'tillverkning';
+        const result = window.__BTG_ORIGINAL_SET_TAB_V19518.apply(this, [tab]);
+        setTimeout(applyKontorUi, 0);
+        return result;
+      };
+    }
+  } catch(_) {}
+
+  try {
+    if (typeof window.loadAccessState === 'function' && !window.__BTG_ORIGINAL_LOAD_ACCESS_STATE_V19518) {
+      window.__BTG_ORIGINAL_LOAD_ACCESS_STATE_V19518 = window.loadAccessState;
+      window.loadAccessState = async function(){
+        const result = await window.__BTG_ORIGINAL_LOAD_ACCESS_STATE_V19518.apply(this, arguments);
+        sanitizeKontorPermissions();
+        setTimeout(applyKontorUi, 0);
+        return result;
+      };
+    }
+  } catch(_) {}
+
+  document.addEventListener('click', function(ev){
+    try {
+      if (!isKontor()) return;
+      const nav = ev.target.closest('[data-tab], [data-nav]');
+      if (!nav) return;
+      const tab = nav.dataset?.tab || nav.getAttribute('data-nav');
+      if (tab && !KONTOR_TABS.has(tab)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        safeSetTab('tillverkning');
+      }
+    } catch(_) {}
+  }, true);
+
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(applyKontorUi, 250); });
+  setTimeout(applyKontorUi, 600);
+  setTimeout(applyKontorUi, 1600);
+})();
+
+</script>
+
+
+<!-- =====================================================
+     v19.5.19b – KONTOR: säker meny-döljning
+     Bygger på fungerande v19.5.18. Endast UI, ingen data/SQL.
+     ===================================================== -->
+<style id="btg-v19-5-19b-kontor-menu-style">
+  body.btg-role-kontor .main-nav .tab-btn[data-tab],
+  body.btg-role-kontor nav.main-nav [data-tab] {
+    display: none !important;
+  }
+  body.btg-role-kontor .main-nav .tab-btn[data-tab="tillverkning"],
+  body.btg-role-kontor .main-nav .tab-btn[data-tab="bestallningar"],
+  body.btg-role-kontor nav.main-nav [data-tab="tillverkning"],
+  body.btg-role-kontor nav.main-nav [data-tab="bestallningar"] {
+    display: block !important;
+  }
+  body.btg-role-kontor #btnSettings,
+  body.btg-role-kontor #btnNordcert,
+  body.btg-role-kontor #btnExportAll,
+  body.btg-role-kontor #btnImportAll,
+  body.btg-role-kontor #btnFactoryAdmin,
+  body.btg-role-kontor #btnOpenFactoryAdmin,
+  body.btg-role-kontor #btnCreateFactoryOpen,
+  body.btg-role-kontor #btnOpenCreateFactory,
+  body.btg-role-kontor #btnAccessFactoryAdmin,
+  body.btg-role-kontor .main-nav .btn:not(#btnAuth):not(#btnLogout) {
+    display: none !important;
+  }
+</style>
+<script id="btg-v19-5-19b-kontor-menu-hide-safe">
+(function(){
+  if (window.__BTG_V19519B_KONTOR_MENU_HIDE_PATCHED) return;
+  window.__BTG_V19519B_KONTOR_MENU_HIDE_PATCHED = true;
+
+  const ALLOWED = new Set(['tillverkning', 'bestallningar']);
+
+  function textOf(id){
+    const el = document.getElementById(id);
+    return el ? String(el.textContent || '') : '';
+  }
+
+  function getRole(){
+    try {
+      const st = window.BTG_ACCESS_STATE || {};
+      const p = st.profile || {};
+      let role = String(p.role_code || p.role || window.BTG_ACTIVE_ROLE || '').trim().toUpperCase();
+      if (!role) {
+        const txt = [textOf('btgAccessBadge'), textOf('roleAccessBadge'), textOf('authStatus')].join(' ').toUpperCase();
+        if (txt.includes('KONTOR')) role = 'KONTOR';
+      }
+      return role;
+    } catch(_) { return ''; }
+  }
+
+  function isKontor(){ return getRole() === 'KONTOR'; }
+
+  function applyKontorMenu(){
+    const kontor = isKontor();
+    document.body.classList.toggle('btg-role-kontor', kontor);
+    if (!kontor) return;
+
+    try {
+      if (window.BTG_ACCESS_STATE) {
+        window.BTG_ACCESS_STATE.permissions = { tillverkning:true, bestallningar:true };
+        if (window.BTG_ACCESS_STATE.profile) {
+          window.BTG_ACCESS_STATE.profile.permissions = { tillverkning:true, bestallningar:true };
+        }
+      }
+    } catch(_) {}
+
+    document.querySelectorAll('.main-nav [data-tab], nav.main-nav [data-tab], .tab-btn[data-tab]').forEach(function(btn){
+      const tab = btn && btn.dataset ? btn.dataset.tab : '';
+      if (!tab) return;
+      btn.hidden = !ALLOWED.has(tab);
+      btn.style.display = ALLOWED.has(tab) ? '' : 'none';
+      btn.setAttribute('aria-hidden', ALLOWED.has(tab) ? 'false' : 'true');
+    });
+
+    ['btnSettings','btnNordcert','btnExportAll','btnImportAll','btnFactoryAdmin','btnOpenFactoryAdmin','btnCreateFactoryOpen','btnOpenCreateFactory','btnAccessFactoryAdmin'].forEach(function(id){
+      const el = document.getElementById(id);
+      if (el) { el.hidden = true; el.style.display = 'none'; }
+    });
+
+    try {
+      const current = document.querySelector('.tab-btn[aria-current="page"]')?.dataset?.tab;
+      if (current && !ALLOWED.has(current) && typeof window.setTab === 'function') window.setTab('tillverkning');
+    } catch(_) {}
+  }
+
+  const oldSetTab = window.setTab;
+  if (typeof oldSetTab === 'function' && !oldSetTab.__btgKontorMenuWrapped) {
+    const wrapped = function(tab){
+      if (isKontor() && !ALLOWED.has(tab)) tab = 'tillverkning';
+      const res = oldSetTab.apply(this, arguments.length ? [tab] : arguments);
+      setTimeout(applyKontorMenu, 0);
+      return res;
+    };
+    wrapped.__btgKontorMenuWrapped = true;
+    window.setTab = wrapped;
+  }
+
+  document.addEventListener('click', function(ev){
+    if (!isKontor()) return;
+    const nav = ev.target && ev.target.closest ? ev.target.closest('[data-tab], [data-nav]') : null;
+    if (!nav) return;
+    const tab = (nav.dataset && (nav.dataset.tab || nav.dataset.nav)) || nav.getAttribute('data-nav') || '';
+    if (tab && !ALLOWED.has(tab)) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      try { if (typeof window.setTab === 'function') window.setTab('tillverkning'); } catch(_) {}
+    }
+  }, true);
+
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(applyKontorMenu, 150); });
+  [300, 900, 1800, 3500].forEach(function(ms){ setTimeout(applyKontorMenu, ms); });
+  let runs = 0;
+  const timer = setInterval(function(){
+    applyKontorMenu();
+    runs += 1;
+    if (runs >= 10) clearInterval(timer);
+  }, 1000);
+})();
+</script>
 
 </body>
 </html>
