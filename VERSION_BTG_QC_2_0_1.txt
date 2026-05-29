@@ -1,8 +1,0 @@
-BTG Quality Control 2.0.1
-
-Patch på BTG QC 2.0.
-
-Ändring:
-- Provningar-widgeten är nu kopplad till Tillverkningsjournalens batches-tabell.
-- Widgeten räknar ut vilka satser som ska provtas enligt provfrekvens.
-- Den jämför mot registrerade provkuber i cubes-tabellen.

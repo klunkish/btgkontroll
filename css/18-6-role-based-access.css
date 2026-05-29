@@ -1,8 +1,0 @@
-body.role-requester .main-nav > *:not([data-tab="prefab"]) { display:none !important; }
-  body.role-requester main > section:not(#tab-prefab) { display:none !important; }
-  body.role-requester #btnSettings,
-  body.role-requester #btnExportAll,
-  body.role-requester #btnImportAll,
-  body.role-requester #btnNordcert { display:none !important; }
-  body.role-requester #prefabRequestFormCard { display:block; }
-  #roleAccessBadge { white-space: nowrap; }

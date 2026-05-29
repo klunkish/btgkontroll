@@ -1,6 +1,0 @@
-BTG Quality Control 2.0.4
-
-Patch:
-- Avformningskuber återlagd i nya menyregistret.
-- Avformningskuber öppnas via nya menyn utan att gamla menyn syns.
-- Avformningskuber finns även som möjlig dashboard-widget/genväg.

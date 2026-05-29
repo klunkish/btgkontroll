@@ -1,6 +1,0 @@
-BTG Quality Control 2.0.2
-
-Patch:
-- Provningar-widgeten visar inte längre hela batch-ID/UUID.
-- Raden visar hållfasthet + datum.
-- Undertext visar recept och m³ när det finns.
