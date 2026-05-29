@@ -1,3 +1,0 @@
-header .header-actions { pointer-events: auto !important; }
-  header .header-actions > * { pointer-events: auto !important; }
-  main, main * { pointer-events: auto; }
