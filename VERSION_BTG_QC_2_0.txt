@@ -1,0 +1,19 @@
+BTG Quality Control 2.0
+
+Grundapplikation från och med denna version.
+
+Innehåller:
+- Ny stabil meny från sidregister
+- Sidbehörigheter per fabrik/användare
+- Dashboardbyggare
+- Fullbreddswidgets med valbar höjd
+- Material & Silor för valfritt material
+- Materialdropdown utan dubletter
+- Ta bort silo
+- Material & Silor dashboardwidget
+- Provningar dashboardwidget
+- Systemcenter
+- Ekonomi/Kalkyl
+- Kvalitetstrender
+- Dokument/offert/faktura
+- Kunder/beställningar
