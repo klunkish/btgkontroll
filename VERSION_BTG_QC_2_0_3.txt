@@ -1,0 +1,6 @@
+BTG Quality Control 2.0.3
+
+Patch:
+- Prefabkö återlagd i nya menyregistret.
+- Prefabkö kan öppnas via nya menyn utan att gamla menyn syns.
+- Prefabkö finns även som möjlig dashboard-widget/genväg.
