@@ -25,6 +25,16 @@
     },
     {key:'orders', label:'Beställningar', match:[/beställ|order|kund/], always:true},
     {key:'cubes', label:'Provningar', match:[/provning|provkub|kuber/], always:true},
+    {key:'demoulding', label:'Avformningskuber', old:['btnDemoulding','btnAvformningskuber'], match:[/avform|avformningskuber|demould|demold/], module:true,
+      exists:()=>!!$('#tab-avformningskuber') || !!$('script[src*="demoulding"],script[src*="avform"]') || !!findOldButton({match:[/avform|avformningskuber|demould|demold/]}),
+      open:()=> {
+        const old=findOldButton({match:[/avform|avformningskuber|demould|demold/]});
+        if(old){ old.click(); setTimeout(hideOldMenu,40); setTimeout(hideOldMenu,250); return true; }
+        const sec=$('#tab-avformningskuber');
+        if(sec){ activateSection(sec); return true; }
+        return false;
+      }
+    },
     {key:'evaluation', label:'Utvärdering', match:[/utvärder|utvarder/], always:true},
     {key:'control', label:'Kontroll', match:[/kontroll/], always:true},
     {key:'materials', label:'Material', match:[/material/], always:true},

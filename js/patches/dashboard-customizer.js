@@ -20,6 +20,7 @@
     {key:'overview',label:'Översikt',hint:'Sammanfattning från dashboard/app',page:'dashboard',default:true},
     {key:'checklist',label:'Kom igång',hint:'Kort checklista',page:'dashboard',default:false},
     {key:'testing',label:'Provningar',hint:'Satser där kub/provtagning ska tas och om det är gjort',page:'cubes',default:true},
+    {key:'demoulding',label:'Avformningskuber',hint:'Genväg till avformning och historik',page:'demoulding',default:false},
     {key:'prefab',label:'Prefabkö',hint:'Genväg till interna prefab-beställningar',page:'prefab',default:false},
     {key:'cement_silos',label:'Material & Silor',hint:'Silonivåer synkade med Material & Silor-fliken',page:'cement_silos',default:true},
     {key:'quality_trends',label:'Kvalitetstrender',hint:'Genväg och sammanfattning',page:'quality_trends',default:false},
@@ -247,7 +248,8 @@
       materials:['Material','Material','materials'],
       recipes:['Recept','Recept','recipes'],
       system_center:['Systemcenter','Admin','system_center'],
-      prefab:['Prefabkö','Kö','prefab']
+      prefab:['Prefabkö','Kö','prefab'],
+      demoulding:['Avformningskuber','Avformning','demoulding']
     }[key];
 
     if(!info) return '';
@@ -665,6 +667,7 @@
     if(btn){btn.click(); return;}
     if(page==='cubes'){ const b=document.querySelector('#btgRebuiltNav [data-btg-page-key="cubes"]'); if(b){b.click(); return;} }
     if(page==='prefab'){ const b=document.querySelector('#btgRebuiltNav [data-btg-page-key="prefab"]'); if(b){b.click(); return;} }
+    if(page==='demoulding'){ const b=document.querySelector('#btgRebuiltNav [data-btg-page-key="demoulding"]'); if(b){b.click(); return;} }
     if(page==='cement_silos' && window.BTG_CEMENT_SILOS?.open){window.BTG_CEMENT_SILOS.open(); return;}
     alert('Kunde inte öppna modulen.');
   }

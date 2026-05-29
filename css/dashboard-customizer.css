@@ -668,3 +668,6 @@ html.btg-menu-rebuilt .tabs{
 
 /* BTG QC 2.0.3 – Prefabkö tillbaka i nya menyn */
 #btgRebuiltNav [data-btg-page-key="prefab"]{display:inline-flex;}
+
+/* BTG QC 2.0.4 – Avformningskuber tillbaka i nya menyn */
+#btgRebuiltNav [data-btg-page-key="demoulding"]{display:inline-flex;}
