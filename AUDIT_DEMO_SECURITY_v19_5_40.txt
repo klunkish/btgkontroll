@@ -1,0 +1,18 @@
+BTG QC v19.5.40 – DEMO AUDIT SAMMANFATTNING
+
+GENOMGÅNGET STATISKT
+- Aktiv fabriksisolering finns sedan v19.5.28: ny data märks med factoryId och arraydata filtreras i frontend.
+- Systemcenter, applikationsekonomi, systemdokument och sidbehörigheter ligger bakom superadmin/RPC-kontroller.
+- Kund-/beställningsdokument fungerade, men tidigare datafix hade en bred fallback-select. Den är borttagen i dessa UI-varianter.
+- Ny demo-security-guard filtrerar synliga klientarrayer mot aktiv fabrik och stämplar sparad data med aktiv factoryId där den kan.
+- Ny SQL 19_5_40_demo_security_hardening.sql hårdnar RPC för kund-/beställningsdokument så annan fabrik inte kan efterfrågas via p_factory_id.
+
+KVAR ATT TESTA LIVE I SUPABASE
+1. Logga in som användare i Fabrik A och skapa kund/order/material/recept.
+2. Logga in som användare i Fabrik B och kontrollera att Fabrik A-data inte syns.
+3. Testa fabriksadmin i A och fabriksadmin i B.
+4. Testa superadmin: ska se Systemcenter men ska inte oavsiktligt ändra aktiv fabrik utan val.
+5. Kontrollera RLS på äldre tabeller: recipes, materials, batches, cubes, customers, orders, diary_entries.
+
+VIKTIGT
+Frontend-filter är bra för demo och användarupplevelse, men RLS/RPC i Supabase är den riktiga spärren.
