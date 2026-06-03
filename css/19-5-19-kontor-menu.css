@@ -1,0 +1,22 @@
+body.btg-role-kontor .main-nav .tab-btn[data-tab],
+  body.btg-role-kontor nav.main-nav [data-tab] {
+    display: none !important;
+  }
+  body.btg-role-kontor .main-nav .tab-btn[data-tab="tillverkning"],
+  body.btg-role-kontor .main-nav .tab-btn[data-tab="bestallningar"],
+  body.btg-role-kontor nav.main-nav [data-tab="tillverkning"],
+  body.btg-role-kontor nav.main-nav [data-tab="bestallningar"] {
+    display: block !important;
+  }
+  body.btg-role-kontor #btnSettings,
+  body.btg-role-kontor #btnNordcert,
+  body.btg-role-kontor #btnExportAll,
+  body.btg-role-kontor #btnImportAll,
+  body.btg-role-kontor #btnFactoryAdmin,
+  body.btg-role-kontor #btnOpenFactoryAdmin,
+  body.btg-role-kontor #btnCreateFactoryOpen,
+  body.btg-role-kontor #btnOpenCreateFactory,
+  body.btg-role-kontor #btnAccessFactoryAdmin,
+  body.btg-role-kontor .main-nav .btn:not(#btnAuth):not(#btnLogout) {
+    display: none !important;
+  }

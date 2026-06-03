@@ -1,0 +1,418 @@
+:root {
+      --bg: #0f172a; --panel: #111827; --panel-2: #1f2937; --text: #e5e7eb; --muted: #9ca3af;
+      --accent: #22c55e; --accent-2: #38bdf8; --danger: #ef4444; --warn: #f59e0b; --ok: #10b981;
+      --card: #0b1220; --border: #334155;
+    }
+    * { box-sizing: border-box; } html, body { height: 100%; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji"; color:var(--text); background: linear-gradient(180deg,#0b1220,#0f172a 120%); }
+    header { background: rgba(17,24,39,.6); backdrop-filter: blur(8px); position: sticky; top:0; z-index:20; border-bottom:1px solid var(--border);}    
+    .container { max-width: 1200px; margin: 0 auto; padding: 12px 16px; }
+    .brand { display:flex; align-items:center; gap:.75rem; font-weight:700; letter-spacing:.3px; }
+    .brand .logo { width: 36px; height: 36px; border-radius: 10px; background: conic-gradient(from 180deg at 50% 50%, #22c55e, #38bdf8, #8b5cf6, #22c55e); box-shadow: 0 8px 30px rgba(34,197,94,.35);}    
+    nav { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .tab-btn { appearance:none; border:1px solid var(--border); color: var(--text); background: linear-gradient(180deg, #0b1220, #0f172a); padding:.5rem .85rem; border-radius: 10px; cursor: pointer; font-weight:600; }
+    .tab-btn[aria-current="page"] { border-color: var(--accent-2); box-shadow: 0 0 0 2px rgba(56,189,248,.2) inset; color:white; }
+    main { padding: 16px; }
+    .grid { display:grid; gap: 16px; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    @media (max-width: 900px){ .grid-2,.grid-3{ grid-template-columns: 1fr; } }
+
+    .card { background: linear-gradient(180deg, rgba(31,41,55,.6), rgba(15,23,42,.8)); border:1px solid var(--border); border-radius: 16px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .card h3 { margin: 0 0 .5rem; font-size: 1.05rem; }
+
+    label { display:block; font-size:.9rem; color: var(--muted); margin-bottom:.25rem }
+    input, select, textarea { width: 100%; background: #0b1220; color: var(--text); border:1px solid var(--border); border-radius: 10px; padding: .55rem .7rem; outline:none; }
+    input:focus, select:focus, textarea:focus{ border-color: var(--accent-2); box-shadow: 0 0 0 2px rgba(56,189,248,.2); }
+    textarea{ min-height: 92px; resize: vertical; }
+    .row { display:flex; gap:.6rem; align-items: center; }
+    .row > * { flex: 1 }
+    .btn { appearance:none; background: linear-gradient(180deg, #16a34a, #15803d); color:white; font-weight:700; border:none; padding:.6rem .9rem; border-radius: 10px; cursor:pointer; }
+    .btn.secondary { background: linear-gradient(180deg, #0b1220, #0f172a); color: var(--text); border:1px solid var(--border); font-weight:600 }
+    .btn.warn { background: linear-gradient(180deg, #f59e0b, #b45309); }
+    .btn.danger { background: linear-gradient(180deg, #ef4444, #b91c1c); }
+    .btn.ghost { background: transparent; border:1px dashed var(--border); color: var(--muted); }
+    .toolbar { display:flex; gap:.5rem; flex-wrap:wrap }
+
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding:.6rem .5rem; border-bottom:1px solid var(--border); font-size:.92rem }
+    th { color: #cbd5e1; font-weight:700; }
+    tr:hover td { background: rgba(148,163,184,.06); }
+
+    .kpi { display:flex; align-items:center; gap:.75rem; padding:10px 12px; border:1px solid var(--border); border-radius: 14px; background: radial-gradient(100% 120% at 0% 0%, rgba(34,197,94,.09), transparent 60%); }
+
+    footer { color: var(--muted); border-top:1px solid var(--border); margin-top: 28px; padding-top: 12px; }
+
+    dialog { width:min(900px, 96vw); background: #0b1220; color:var(--text); border:1px solid var(--border); border-radius: 16px; }
+    dialog::backdrop { background: rgba(2,6,23,.6); backdrop-filter: blur(2px) }
+
+    .pill { font-size:.75rem; padding:.2rem .5rem; border-radius:999px; border:1px solid var(--border); color: var(--muted) }
+    .pill.ok { border-color: #065f46; color:#34d399 }
+    .pill.warn { border-color: #92400e; color:#fbbf24 }
+    .pill.danger { border-color: #7f1d1d; color:#fca5a5 }
+
+    .grid > * { min-width: 0; } .grid > .card { min-width: 0; } .card { overflow: hidden; }
+    .kpi { flex-wrap: wrap; } .kpi > * { min-width: 0; } .kpi > :nth-child(2) { flex: 1; overflow-wrap: anywhere; }
+    #latestBatches ul { margin: 0; padding-left: 1.1rem; } #latestBatches li { line-height: 1.35; }
+  
+    #tab-dashboard.dashboard-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    #overviewCard { grid-column: 1 / -1; }
+    @media (max-width: 900px){ #tab-dashboard.dashboard-grid { grid-template-columns: 1fr; } }
+  
+    #quickstartCard .kpi { display: grid; grid-template-columns: auto 1fr; align-items: start; }
+    #quickstartCard .kpi > :nth-child(3) { grid-column: 1 / -1; margin-left: 0 !important; }
+    #quickstartCard .kpi > :nth-child(3) .btn { margin-top: .25rem; width: max-content; }
+  
+    #tab-kontroll .dev-status { white-space: nowrap; }
+    .control-months { overflow:auto; max-height: 60vh; margin-top:.5rem; }
+    .control-months table { width:100%; border-collapse: collapse; }
+    .control-months th, .control-months td { padding:.5rem; border-bottom:1px solid var(--border); }
+    .control-months .pill { display:inline-block; }
+    #controlMonths .month-label { font-weight:700; }
+
+    #controlDashBody table { width:100%; border-collapse: collapse; }
+    #controlDashBody th, #controlDashBody td { padding:.4rem .5rem; border-bottom:1px solid var(--border); }
+  
+    #cubesDashBody table { width:100%; border-collapse: collapse; }
+    #cubesDashBody th, #cubesDashBody td { padding:.4rem .5rem; border-bottom:1px solid var(--border); }
+
+    .imports-list { border:1px dashed var(--border); border-radius: 10px; padding:.5rem; }
+    .imports-item { display:flex; gap:.5rem; align-items:center; margin:.25rem 0; }
+    .imports-item > input[type="number"]{ max-width: 140px; }
+
+    #tab-utvardering .subtabs { display:flex; gap:.5rem; }
+    #tab-utvardering .subtabs .tab { border:1px solid var(--border); border-radius:10px; padding:.35rem .6rem; cursor:pointer; }
+    #tab-utvardering .tab[aria-current="page"]{ border-color: var(--accent-2); box-shadow: 0 0 0 2px rgba(56,189,248,.2) inset; color:white; }
+    .help-hint{ text-decoration: underline dotted; cursor: help; }
+
+
+
+    /* v12: preliminär receptbedömning av exponeringsklasser */
+    .exposure-pills { display:flex; flex-wrap:wrap; gap:.25rem; align-items:center; }
+    .exposure-pill { display:inline-block; padding:.16rem .45rem; border-radius:999px; border:1px solid var(--border); font-size:.74rem; color:#cbd5e1; background:rgba(15,23,42,.65); }
+    .exposure-pill.ok { border-color:#065f46; color:#34d399; }
+    .exposure-pill.warn { border-color:#92400e; color:#fbbf24; }
+    .exposure-note { color: var(--muted); font-size:.82rem; margin-top:.35rem; line-height:1.35; }
+    /* Nordcert dialog */
+    #nordcertDialog .grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+    #nordcertDialog h4 { margin: .2rem 0 .35rem; }
+
+
+
+    /* =====================================================
+       v18 BRANDING / COMMERCIAL MVP POLISH
+       Visuell identitet för BTG Quality Control.
+       ===================================================== */
+    .brand-title { font-size:1.04rem; font-weight:800; letter-spacing:.2px; }
+    .brand-subtitle { color:var(--muted); font-size:.74rem; }
+    .brand .logo { position:relative; overflow:hidden; background:linear-gradient(135deg,#475569,#1e293b 42%,#38bdf8 43%,#22c55e 100%); }
+    .brand .logo::before { content:""; position:absolute; width:17px; height:17px; left:8px; top:9px; border:2px solid rgba(255,255,255,.85); border-radius:4px; transform:rotate(-8deg); background:rgba(15,23,42,.35); }
+    .brand .logo::after { content:"✓"; position:absolute; right:6px; bottom:3px; font-size:18px; line-height:1; color:#dcfce7; font-weight:900; text-shadow:0 2px 8px rgba(0,0,0,.35); }
+    .product-hero { grid-column:1 / -1; padding:18px; background:radial-gradient(80% 120% at 0% 0%, rgba(56,189,248,.18), transparent 52%), linear-gradient(180deg, rgba(31,41,55,.75), rgba(15,23,42,.9)); }
+    .product-hero h2 { margin:.1rem 0 .25rem; font-size:1.55rem; letter-spacing:.2px; }
+    .product-hero p { margin:.25rem 0 0; color:var(--muted); max-width:820px; line-height:1.45; }
+    .hero-badges { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.75rem; }
+    .hero-badge { border:1px solid var(--border); background:rgba(15,23,42,.55); border-radius:999px; padding:.28rem .6rem; color:#cbd5e1; font-size:.8rem; }
+    .hero-badge.ok { border-color:#065f46; color:#34d399; }
+    .hero-badge.info { border-color:#075985; color:#7dd3fc; }
+    .commercial-kpi { min-height:86px; align-items:flex-start; background:linear-gradient(180deg, rgba(15,23,42,.75), rgba(15,23,42,.45)); }
+    #authDialog form { max-width:760px; }
+    #authDialog h3::after { content:"Cloud login"; display:block; color:var(--muted); font-size:.8rem; font-weight:500; margin-top:.15rem; }
+
+    /* =====================================================
+       AUTH / LOGIN
+       Små UI-delar för SaaS-inloggning med Supabase Auth.
+       ===================================================== */
+    #authStatus { max-width: 220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #authDialog .auth-actions { display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.7rem; }
+
+    /* =====================================================
+       v10 DASHBOARD POLISH
+       Små statusrutor och tydligare driftkänsla för molndata.
+       ===================================================== */
+    #cloudStatusCard { grid-column: 1 / -1; }
+    .status-dot { width:.65rem; height:.65rem; border-radius:999px; display:inline-block; background:var(--muted); box-shadow:0 0 0 3px rgba(148,163,184,.12); }
+    .status-dot.ok { background:var(--ok); box-shadow:0 0 0 3px rgba(16,185,129,.15); }
+    .status-dot.warn { background:var(--warn); box-shadow:0 0 0 3px rgba(245,158,11,.16); }
+    .status-dot.danger { background:var(--danger); box-shadow:0 0 0 3px rgba(239,68,68,.16); }
+    .status-line { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    .mini-stat { border:1px solid var(--border); border-radius:12px; padding:.55rem .7rem; background:rgba(15,23,42,.55); }
+    .mini-stat strong { display:block; font-size:1.15rem; }
+    .mini-stat small { color:var(--muted); }
+
+
+    /* =====================================================
+       v18.2 HEADER / NAVIGATION POLISH
+       - Bredare header
+       - Menyn hålls på en rad med horisontell scroll vid behov
+       - Login/molnstatus ligger i egen sektion
+       ===================================================== */
+    .container.header-layout {
+      max-width: 1600px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 1rem;
+    }
+    .main-nav {
+      justify-content: center;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overflow-y: visible;
+      padding: .15rem 0;
+      scrollbar-width: thin;
+    }
+    .main-nav .tab-btn, .main-nav .btn {
+      white-space: nowrap;
+      flex: 0 0 auto;
+      padding: .48rem .72rem;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: .45rem;
+      flex-wrap: nowrap;
+      min-width: max-content;
+    }
+    .header-actions .btn, .header-actions .pill { white-space: nowrap; }
+    #authStatus {
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cloud-indicator {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(15,23,42,.85);
+      cursor: help;
+      flex: 0 0 auto;
+    }
+    .cloud-indicator .status-dot { width: .72rem; height: .72rem; }
+    .cloud-tooltip {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 10px);
+      z-index: 60;
+      width: min(360px, 92vw);
+      padding: .75rem;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #020617;
+      color: var(--text);
+      box-shadow: 0 18px 45px rgba(0,0,0,.45);
+      line-height: 1.35;
+    }
+    .cloud-indicator:hover .cloud-tooltip, .cloud-indicator:focus-within .cloud-tooltip { display: block; }
+    .cloud-tooltip strong { display:block; margin-bottom:.3rem; }
+    .cloud-tooltip .muted-line { color: var(--muted); font-size:.82rem; margin:.15rem 0; }
+    .cloud-tooltip .tooltip-stats {
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap:.25rem .65rem;
+      margin-top:.45rem;
+      font-size:.82rem;
+      color:#cbd5e1;
+    }
+    /* Molnstatusen visas nu i headern, inte som eget dashboardkort. */
+    #cloudStatusCard { display:none !important; }
+    @media (max-width: 1100px){
+      .container.header-layout { grid-template-columns: 1fr; align-items: stretch; }
+      .main-nav { justify-content: flex-start; }
+      .header-actions { justify-content: flex-start; overflow-x:auto; padding-bottom:.2rem; }
+    }
+
+
+
+    /* =====================================================
+       v18.3.1 SAFE SIDEBAR LAYOUT
+       Denna patch bygger på fungerande v18.2 och ändrar endast layout.
+       Appens dashboard/sektioner/script lämnas orörda.
+       ===================================================== */
+    @media (min-width: 901px){
+      body { padding-left: 292px; }
+      header {
+        position: fixed !important;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 292px;
+        height: 100vh;
+        overflow-y: auto;
+        overflow-x: hidden;
+        border-right: 1px solid var(--border);
+        border-bottom: 0;
+        z-index: 80;
+      }
+      header .container.header-layout {
+        max-width: none;
+        min-height: 100%;
+        display: flex !important;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+        padding: 18px 14px;
+      }
+      header .brand {
+        padding: .35rem .3rem .85rem;
+        border-bottom: 1px solid var(--border);
+      }
+      header .brand .logo { width: 42px; height: 42px; flex: 0 0 auto; }
+      header .brand-title { font-size: 1.05rem; }
+      header .brand-subtitle { display:block; max-width: 190px; line-height:1.25; }
+      .main-nav {
+        display: flex !important;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: .45rem;
+        overflow: visible;
+        padding: .2rem 0;
+      }
+      .main-nav .tab-btn,
+      .main-nav .btn {
+        width: 100%;
+        text-align: left;
+        justify-content: flex-start;
+        border-radius: 12px;
+        padding: .62rem .75rem;
+      }
+      .main-nav .tab-btn[aria-current="page"] {
+        background: rgba(56,189,248,.12);
+      }
+      .header-actions {
+        margin-top: auto;
+        display: grid !important;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: .55rem;
+        min-width: 0;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border);
+        overflow: visible;
+      }
+      .header-actions #authStatus { max-width: 190px; }
+      .header-actions #btnAuth,
+      .header-actions #btnLogout,
+      .header-actions #btnExportAll,
+      .header-actions #btnImportAll {
+        grid-column: 1 / -1;
+        width: 100%;
+      }
+      .cloud-tooltip {
+        left: 0;
+        right: auto;
+        bottom: calc(100% + 10px);
+        top: auto;
+        width: min(330px, calc(100vw - 32px));
+      }
+      main.container {
+        max-width: 1400px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .mobile-sidebar-toggle { display:none !important; }
+      .sidebar-backdrop { display:none !important; }
+    }
+
+    .mobile-sidebar-toggle {
+      display:none;
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      z-index: 120;
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(15,23,42,.95);
+      color: var(--text);
+      font-weight: 800;
+      cursor:pointer;
+      box-shadow: 0 12px 28px rgba(0,0,0,.35);
+    }
+    .sidebar-backdrop {
+      display:none;
+      position: fixed;
+      inset:0;
+      background: rgba(2,6,23,.58);
+      z-index:70;
+    }
+
+    @media (max-width: 900px){
+      body { padding-left: 0; }
+      .mobile-sidebar-toggle { display:block; }
+      header {
+        position: fixed !important;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: min(86vw, 310px);
+        height: 100vh;
+        overflow-y: auto;
+        overflow-x: hidden;
+        border-right: 1px solid var(--border);
+        border-bottom: 0;
+        z-index: 100;
+        transform: translateX(-105%);
+        transition: transform .22s ease;
+      }
+      body.sidebar-open header { transform: translateX(0); }
+      body.sidebar-open .sidebar-backdrop { display:block; }
+      header .container.header-layout {
+        max-width: none;
+        min-height: 100%;
+        display: flex !important;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+        padding: 18px 14px;
+      }
+      header .brand { padding-bottom:.85rem; border-bottom:1px solid var(--border); }
+      .main-nav {
+        display:flex !important;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content:flex-start;
+        gap:.45rem;
+        overflow:visible;
+      }
+      .main-nav .tab-btn,
+      .main-nav .btn {
+        width:100%;
+        text-align:left;
+        padding:.62rem .75rem;
+      }
+      .header-actions {
+        margin-top:auto;
+        display:grid !important;
+        grid-template-columns:auto 1fr;
+        gap:.55rem;
+        align-items:center;
+        min-width:0;
+        padding-top:1rem;
+        border-top:1px solid var(--border);
+      }
+      .header-actions #btnAuth,
+      .header-actions #btnLogout,
+      .header-actions #btnExportAll,
+      .header-actions #btnImportAll {
+        grid-column: 1 / -1;
+        width: 100%;
+      }
+      .cloud-tooltip {
+        left:0;
+        right:auto;
+        bottom: calc(100% + 10px);
+        top:auto;
+      }
+      main { padding-top: 64px; }
+    }
