@@ -1,0 +1,15 @@
+#btgFactorySetupCard { grid-column: 1 / -1; border-color: rgba(56,189,248,.45); }
+  #btgFactorySetupCard .factory-actions { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.65rem; }
+  #btgFactorySelectorWrap { display:none; grid-column: 1 / -1; gap:.25rem; }
+  #btgFactorySelectorWrap label { margin-bottom:0; font-size:.75rem; }
+  #btgFactorySelector { min-width: 190px; padding:.42rem .55rem; }
+  #btgFactoryAdminDialog table { font-size:.9rem; }
+  #btgFactoryAdminDialog .generated-code { font-size:1.05rem; letter-spacing:.08em; font-weight:900; }
+  #btgFactoryAdminDialog .admin-code-box, #btgCreateFactoryDialog .admin-code-box {
+    border:1px dashed var(--accent-2); border-radius:12px; padding:.7rem; background:rgba(56,189,248,.08); margin-top:.65rem;
+  }
+  body.btg-access-locked main > section#tab-dashboard { display:grid !important; }
+  body.btg-access-locked #btgFactorySetupCard { display:block !important; }
+  body.btg-access-locked #tab-dashboard > *:not(#btgFactorySetupCard) { display:none !important; }
+  body.btg-v195-superadmin.btg-access-locked main > section#tab-dashboard { display:grid !important; }
+  @media (max-width: 900px){ #btgFactorySelectorWrap { grid-column: 1 / -1; } }
