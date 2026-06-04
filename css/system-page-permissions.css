@@ -1,0 +1,28 @@
+
+/* v19.5.35 Systemcenter – sidbehörigheter */
+.sc-perm-open-btn{white-space:nowrap}
+.sc-perm-modal::backdrop{background:rgba(2,6,23,.66);backdrop-filter:blur(4px)}
+.sc-perm-modal{border:1px solid rgba(96,165,250,.24);background:#0d1728;color:#eef5ff;border-radius:22px;padding:0;max-width:980px;width:min(96vw,980px);box-shadow:0 30px 90px rgba(2,6,23,.55)}
+.sc-perm-inner{padding:20px}
+.sc-perm-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.sc-perm-head h3{margin:0;color:#f8fbff}
+.sc-perm-sub{color:#b8c7da;margin:.3rem 0 0;font-size:.92rem}
+.sc-perm-target{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 16px}
+.sc-perm-target label{font-weight:800;color:#dbe7f5;font-size:.86rem}
+.sc-perm-target select{width:100%;margin-top:5px;background:#0b1424;color:#f8fbff;border:1px solid rgba(148,163,184,.34);border-radius:12px;padding:10px 12px}
+.sc-perm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.sc-perm-card{border:1px solid rgba(96,165,250,.16);background:linear-gradient(180deg,#132039,#0e192c);border-radius:16px;padding:12px;color:#eaf2fb}
+.sc-perm-card h4{margin:0 0 4px;color:#f8fbff}
+.sc-perm-card p{margin:0 0 10px;color:#9fb2cc;font-size:.82rem}
+.sc-perm-modes{display:flex;gap:6px;flex-wrap:wrap}
+.sc-perm-mode{display:inline-flex;align-items:center;gap:5px;border:1px solid rgba(148,163,184,.24);background:#101d33;border-radius:999px;padding:7px 9px;font-weight:800;font-size:.78rem;cursor:pointer}
+.sc-perm-mode input{accent-color:#60a5fa}
+.sc-perm-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px}
+.sc-perm-note{border:1px dashed rgba(148,163,184,.28);background:#101b2f;border-radius:14px;padding:12px;color:#c6d5e8;margin:10px 0}
+.sc-perm-badge{display:inline-flex;border-radius:999px;padding:4px 8px;font-size:.74rem;font-weight:900}
+.sc-perm-badge.visible{background:rgba(5,150,105,.18);color:#86efac}
+.sc-perm-badge.hidden{background:rgba(245,158,11,.18);color:#fde68a}
+.sc-perm-badge.locked{background:rgba(225,29,72,.18);color:#fecdd3}
+.sc-page-locked{opacity:.55;filter:saturate(.65);position:relative}
+.sc-page-locked::after{content:'🔒';margin-left:6px}
+@media(max-width:900px){.sc-perm-grid,.sc-perm-target{grid-template-columns:1fr}}
